@@ -2975,10 +2975,8 @@ export default function App() {
     // 1. Add all DB conversations
     dbConversations.forEach((conv) => {
       const partnerId = conv.user1_id === myId ? conv.user2_id : conv.user1_id;
-      const partnerProfile = findPerson(partnerId) || {
-        id: partnerId,
-        full_name: "SkillSwap Member",
-      };
+      const partnerProfile = findPerson(partnerId);
+      if (!partnerProfile) return;
 
       convMap.set(partnerId, {
         partner: partnerProfile,
@@ -3003,10 +3001,8 @@ export default function App() {
         const partnerId = sender === myId ? receiver : sender;
 
         if (partnerId && !convMap.has(partnerId)) {
-          const partnerProfile = findPerson(partnerId) || {
-            id: partnerId,
-            full_name: "SkillSwap Member",
-          };
+          const partnerProfile = findPerson(partnerId);
+          if (!partnerProfile) return;
 
           convMap.set(partnerId, {
             partner: partnerProfile,
