@@ -5572,16 +5572,31 @@ footer {
 
 @media (max-width: 768px) {
   /* --- Global --- */
+  main {
+    padding-bottom: 100px;
+  }
+
+  main.chat-active {
+    padding-bottom: 0;
+  }
+
   .inside-page {
     width: 100%;
-    padding: 16px 12px 80px;
+    padding: 16px 12px 100px;
+  }
+
+  .inside-page.chat-view-page {
+    padding: 0;
+    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
+    overflow: hidden;
   }
 
   .inside-header h1 {
     font-size: 22px;
   }
 
-  /* --- Navbar --- */
+  /* --- Navbar: hide desktop nav, compact header --- */
   .navbar {
     height: auto;
     flex-wrap: wrap;
@@ -5608,27 +5623,7 @@ footer {
   }
 
   .navigation {
-    gap: 2px;
-    padding: 3px;
-    overflow-x: auto;
-    flex-shrink: 1;
-    min-width: 0;
-    -webkit-overflow-scrolling: touch;
-    order: 3;
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .navigation::-webkit-scrollbar {
-    display: none;
-  }
-
-  .navigation button {
-    padding: 6px 10px;
-    font-size: 12px;
-    white-space: nowrap;
-    gap: 4px;
-    min-height: 36px;
+    display: none !important;
   }
 
   .account-area {
@@ -5640,6 +5635,17 @@ footer {
     width: 32px;
     height: 32px;
     font-size: 13px;
+  }
+
+  .account-dropdown {
+    position: fixed;
+    top: auto;
+    bottom: 60px;
+    right: 12px;
+    left: 12px;
+    min-width: 0;
+    width: auto;
+    max-width: 280px;
   }
 
   /* --- Hero --- */
@@ -5655,6 +5661,24 @@ footer {
     aspect-ratio: auto;
     height: auto;
     min-height: 200px;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .hero-actions .primary-button,
+  .hero-actions .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .trust-row {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
   }
 
   .floating-skill {
@@ -5697,7 +5721,7 @@ footer {
   .chat-container-layout {
     grid-template-columns: 1fr;
     height: 100%;
-    border-radius: 12px;
+    border-radius: 0;
   }
 
   .chat-inbox-sidebar.hidden-mobile {
@@ -5706,6 +5730,40 @@ footer {
 
   .real-chat-main.hidden-mobile {
     display: none;
+  }
+
+  .real-chat-main {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+  }
+
+  .chat-room-header {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .chat-room-partner {
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .partner-info h3 {
+    font-size: 13px;
+  }
+
+  .partner-info p {
+    font-size: 11px;
+  }
+
+  .chat-call-buttons {
+    gap: 4px;
+  }
+
+  .call-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
   }
 
   /* --- Features section --- */
@@ -6085,14 +6143,8 @@ footer {
     font-size: 13px;
   }
 
-  .navigation button {
-    padding: 5px 8px;
-    font-size: 11px;
-    gap: 3px;
-  }
-
   .inside-page {
-    padding: 12px 10px 80px;
+    padding: 12px 10px 100px;
   }
 
   .inside-header h1 {
@@ -6162,6 +6214,7 @@ footer {
   .incoming-call-card {
     padding: 18px;
     margin: 8px;
+    max-width: calc(100vw - 32px);
   }
 
   .large-avatar {
@@ -6232,5 +6285,148 @@ footer {
 
   .login-page {
     padding-top: max(24px, env(safe-area-inset-top));
+  }
+
+  .mobile-bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ============================
+   MOBILE BOTTOM NAVIGATION
+   ============================ */
+
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid #eeeef;
+  z-index: 1000;
+  padding: 6px 0 4px;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.mobile-bottom-nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  min-width: 56px;
+  color: #999;
+  font-size: 10px;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.mobile-bottom-nav button.mbn-active {
+  color: #7435e8;
+}
+
+.mbn-icon {
+  font-size: 20px;
+  line-height: 1;
+  position: relative;
+}
+
+.mbn-label {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.mbn-badge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  background: #ef4444;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mobile header icons (search, notification) */
+.mobile-header-icon {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+/* Chat back button */
+.chat-back-btn {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: #7435e8;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Hide footer on mobile (bottom nav replaces it) */
+@media (max-width: 767px) {
+  footer {
+    display: none;
+  }
+}
+
+/* Show mobile bottom nav + icons + back button on mobile */
+@media (max-width: 767px) {
+  .mobile-bottom-nav {
+    display: flex;
+  }
+
+  .mobile-header-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chat-back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* ============================
+   RESPONSIVE CONTAINER
+   ============================ */
+
+.container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-left: 24px;
+  padding-right: 24px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 767px) {
+  .container {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }

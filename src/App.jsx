@@ -3655,11 +3655,10 @@ export default function App() {
                 <div className="chat-room-header">
                   <div className="chat-room-partner">
                     <button
-                      className="secondary-button"
-                      style={{ padding: "8px 12px", fontSize: "12px" }}
+                      className="chat-back-btn"
                       onClick={() => setActiveChatUser(null)}
                     >
-                      ← Back
+                      ←
                     </button>
 
                     <div className="partner-avatar clickable-avatar" onClick={() => openPublicProfile(activeChatUser.id)}>
@@ -5697,6 +5696,12 @@ function renderLogin() {
             onClick={(e) => e.stopPropagation()}
             style={{ position: "relative" }}
           >
+            <button className="mobile-header-icon" onClick={() => setPage("chat")} title="Search">
+              🔍
+            </button>
+            <button className="mobile-header-icon" onClick={() => setPage("chat")} title="Notifications">
+              🔔
+            </button>
             <div
               className="small-avatar account-avatar-btn"
               onClick={() => setShowAccountMenu((v) => !v)}
@@ -5772,7 +5777,7 @@ function renderLogin() {
         </div>
       )}
 
-      <main>
+      <main className={page === "chat" ? "chat-active" : ""}>
         {viewingProfile ? (
           renderPublicProfile()
         ) : (
@@ -5785,6 +5790,51 @@ function renderLogin() {
           </>
         )}
       </main>
+
+      {/* ─── Mobile Bottom Navigation ─── */}
+      <nav className="mobile-bottom-nav">
+        <button
+          className={page === "discover" && !viewingProfile ? "mbn-active" : ""}
+          onClick={() => { setActiveChatUser(null); setViewingProfile(null); setPage("discover"); }}
+        >
+          <span className="mbn-icon">🏠</span>
+          <span className="mbn-label">Discover</span>
+        </button>
+        <button
+          className={page === "chat" && !viewingProfile ? "mbn-active" : ""}
+          onClick={() => { setViewingProfile(null); setPage("chat"); }}
+        >
+          <span className="mbn-icon">
+            💬
+            {pendingIncomingRequests.length > 0 && <span className="mbn-badge">{pendingIncomingRequests.length}</span>}
+          </span>
+          <span className="mbn-label">Chat</span>
+        </button>
+        <button
+          className={page === "sessions" && !viewingProfile ? "mbn-active" : ""}
+          onClick={() => { setActiveChatUser(null); setViewingProfile(null); setSessionView(null); setSessionSummaryData(null); setPage("sessions"); }}
+        >
+          <span className="mbn-icon">
+            📅
+            {upcomingSessions.length > 0 && <span className="mbn-badge">{upcomingSessions.length}</span>}
+          </span>
+          <span className="mbn-label">Sessions</span>
+        </button>
+        <button
+          className={page === "rewards" && !viewingProfile ? "mbn-active" : ""}
+          onClick={() => { setActiveChatUser(null); setViewingProfile(null); setPage("rewards"); }}
+        >
+          <span className="mbn-icon">⭐</span>
+          <span className="mbn-label">Rewards</span>
+        </button>
+        <button
+          className={page === "profile" && !viewingProfile ? "mbn-active" : ""}
+          onClick={() => { setActiveChatUser(null); setViewingProfile(null); setPage("profile"); }}
+        >
+          <span className="mbn-icon">👤</span>
+          <span className="mbn-label">Profile</span>
+        </button>
+      </nav>
 
       {/* ─── Incoming Call Overlay ─── */}
       {incomingCall && (
