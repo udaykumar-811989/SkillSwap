@@ -4831,6 +4831,21 @@ footer {
   color: rgba(255, 255, 255, 0.55);
 }
 
+.login-link-btn {
+  background: none;
+  border: none;
+  color: #7435e8;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.login-link-btn:hover {
+  color: #9b6ff0;
+}
+
 /* ============================
    TYPING INDICATOR
    ============================ */

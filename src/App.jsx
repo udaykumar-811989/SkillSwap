@@ -18,13 +18,7 @@ const DEMO_USERS = [
 ];
 
 export default function App() {
-  // Initialize with active default user so app is immediately usable without white screens
-  const [session, setSession] = useState({
-    user: {
-      id: DEMO_USERS[0].id,
-      email: DEMO_USERS[0].email,
-    },
-  });
+  const [session, setSession] = useState(null);
 
   const [profile, setProfile] = useState(null);
   const [profiles, setProfiles] = useState([]);
@@ -36,7 +30,7 @@ export default function App() {
   const [loadingViewProfile, setLoadingViewProfile] = useState(false);
   const [profileViewStack, setProfileViewStack] = useState([]);
 
-  const [page, setPage] = useState("discover"); // "discover" | "chat" | "profile" | "login"
+  const [page, setPage] = useState("login"); // "discover" | "chat" | "profile" | "login"
   const [loading, setLoading] = useState(false);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -744,6 +738,9 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [signUpName, setSignUpName] = useState("");
+  const [signUpUsername, setSignUpUsername] = useState("");
 
   const [form, setForm] = useState({
     full_name: "",
@@ -788,56 +785,14 @@ export default function App() {
 
         if (currentSession?.user?.id) {
           setSession(currentSession);
+          setPage("discover");
           await loadUserData(currentSession.user.id);
         } else {
-          // No existing session — auto-login as first demo user
-          const demoUser = DEMO_USERS[0];
-          const { data, error: signInError } = await supabase.auth.signInWithPassword({
-            email: demoUser.email,
-            password: "SkillSwapDemo2024!",
-          });
-
-          if (!signInError && data?.session) {
-            setSession(data.session);
-            await loadUserData(data.session.user.id);
-          } else {
-            // Try to create the demo user
-            const { data: signUpData } = await supabase.auth.signUp({
-              email: demoUser.email,
-              password: "SkillSwapDemo2024!",
-              options: {
-                data: { full_name: demoUser.name, username: demoUser.username },
-              },
-            });
-
-            if (signUpData?.session) {
-              setSession(signUpData.session);
-              await supabase.from("profiles").upsert({
-                id: signUpData.session.user.id,
-                full_name: demoUser.name,
-                name: demoUser.name,
-                username: demoUser.username,
-                email: demoUser.email,
-                bio: "Demo user on SkillSwap",
-                skills_teach: JSON.stringify(["Python", "JavaScript"]),
-                skills_learn: JSON.stringify(["React", "DSA"]),
-                teach_skills: ["Python", "JavaScript"],
-                learn_skills: ["React", "DSA"],
-              }, { onConflict: "id" });
-              await loadUserData(signUpData.session.user.id);
-            } else {
-              // Absolute fallback to mock session
-              setSession({ user: { id: demoUser.id, email: demoUser.email } });
-              await loadUserData(demoUser.id);
-            }
-          }
+          setPage("login");
         }
       } catch (err) {
         console.error("Auth init error:", err);
-        // Fallback
-        const demoUser = DEMO_USERS[0];
-        setSession({ user: { id: demoUser.id, email: demoUser.email } });
-        await loadUserData(demoUser.id);
+        setPage("login");
       }
     }
 
@@ -938,12 +893,6 @@ export default function App() {
   }
 
   /* =========================
-     USER SWITCHER (DEMO PAIRING — kept for internal demo use)
-  ========================= */
-
-  const DEMO_PASSWORD = "SkillSwapDemo2024!";
-
-  /* =========================
      LOGIN
   ========================= */
 
@@ -991,6 +940,83 @@ export default function App() {
       setError(
         err?.message || "Login failed. Please check your email and password."
       );
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  async function handleSignUp(event) {
+    event.preventDefault();
+
+    const email = loginEmail.trim();
+    const name = signUpName.trim();
+    const username = signUpUsername.trim();
+
+    if (!name) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (!username) {
+      setError("Please choose a username.");
+      return;
+    }
+    if (!email) {
+      setError("Please enter your email.");
+      return;
+    }
+    if (!loginPassword || loginPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    try {
+      setLoginLoading(true);
+      setError("");
+      setMessage("");
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password: loginPassword,
+        options: {
+          data: { full_name: name, username },
+        },
+      });
+
+      if (signUpError) {
+        throw signUpError;
+      }
+
+      if (data?.user) {
+        await supabase.from("profiles").upsert({
+          id: data.user.id,
+          full_name: name,
+          name: name,
+          username: username,
+          email: email,
+          bio: "",
+          skills_teach: [],
+          skills_learn: [],
+          teach_skills: [],
+          learn_skills: [],
+        }, { onConflict: "id" });
+      }
+
+      if (data?.session) {
+        setSession(data.session);
+        setPage("discover");
+        await loadUserData(data.session.user.id);
+        showMessage("Welcome to SkillSwap!");
+      } else {
+        setMessage("Account created! Please check your email to verify, then sign in.");
+        setIsSignUp(false);
+      }
+
+      setLoginPassword("");
+      setSignUpName("");
+      setSignUpUsername("");
+    } catch (err) {
+      console.error("Sign up error:", err);
+      setError(err?.message || "Sign up failed. Please try again.");
     } finally {
       setLoginLoading(false);
     }
@@ -5453,8 +5479,10 @@ function renderLogin() {
             <span>SkillSwap</span>
           </div>
 
-          <h2>Welcome back</h2>
-          <p className="login-subtitle">Sign in to continue swapping skills</p>
+          <h2>{isSignUp ? "Create account" : "Welcome back"}</h2>
+          <p className="login-subtitle">
+            {isSignUp ? "Sign up to start swapping skills" : "Sign in to continue swapping skills"}
+          </p>
 
           {error && (
             <div className="login-error-msg">
@@ -5462,42 +5490,125 @@ function renderLogin() {
             </div>
           )}
 
-          <form className="login-form" onSubmit={handleLogin}>
-            <div className="form-group">
-              <label>Email address</label>
-              <input
-                type="email"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                autoFocus
-              />
+          {message && (
+            <div className="login-error-msg" style={{ background: "#d4edda", color: "#155724", border: "1px solid #c3e6cb" }}>
+              <span>✅</span> {message}
             </div>
+          )}
 
-            <div className="form-group">
-              <label>Password</label>
-              <input
-                type="password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
-            </div>
+          {isSignUp ? (
+            <form className="login-form" onSubmit={handleSignUp}>
+              <div className="form-group">
+                <label>Full name</label>
+                <input
+                  type="text"
+                  value={signUpName}
+                  onChange={(e) => setSignUpName(e.target.value)}
+                  placeholder="John Doe"
+                  required
+                  autoFocus
+                />
+              </div>
 
-            <button
-              type="submit"
-              className="primary-button login-submit-btn"
-              disabled={loginLoading}
-            >
-              {loginLoading ? "Signing in..." : "Sign in →"}
-            </button>
-          </form>
+              <div className="form-group">
+                <label>Username</label>
+                <input
+                  type="text"
+                  value={signUpUsername}
+                  onChange={(e) => setSignUpUsername(e.target.value)}
+                  placeholder="johndoe"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Email address</label>
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="primary-button login-submit-btn"
+                disabled={loginLoading}
+              >
+                {loginLoading ? "Creating account..." : "Sign up →"}
+              </button>
+            </form>
+          ) : (
+            <form className="login-form" onSubmit={handleLogin}>
+              <div className="form-group">
+                <label>Email address</label>
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="primary-button login-submit-btn"
+                disabled={loginLoading}
+              >
+                {loginLoading ? "Signing in..." : "Sign in →"}
+              </button>
+            </form>
+          )}
 
           <p className="login-footer-note">
-            Don't have an account?{" "}
-            <strong>Contact your SkillSwap administrator.</strong>
+            {isSignUp ? (
+              <>Already have an account?{" "}
+                <button
+                  type="button"
+                  className="login-link-btn"
+                  onClick={() => { setIsSignUp(false); setError(""); setMessage(""); }}
+                >
+                  Sign in
+                </button>
+              </>
+            ) : (
+              <>Don't have an account?{" "}
+                <button
+                  type="button"
+                  className="login-link-btn"
+                  onClick={() => { setIsSignUp(true); setError(""); setMessage(""); }}
+                >
+                  Sign up
+                </button>
+              </>
+            )}
           </p>
         </div>
       </div>
