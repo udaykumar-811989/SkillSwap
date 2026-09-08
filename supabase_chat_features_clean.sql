@@ -31,6 +31,11 @@ BEGIN
     media_url = '', duration = 0, reactions = '{}'::jsonb,
     reply_to_id = NULL, reply_to_content = '', reply_to_sender_name = ''
   WHERE id = p_message_id;
+
+  UPDATE public.conversations SET
+    last_message_preview = 'You unsent this message'
+  WHERE id = v_msg.conversation_id AND last_message_sender_id = v_my_id;
+
   RETURN jsonb_build_object('ok', true);
 END; $$;
 

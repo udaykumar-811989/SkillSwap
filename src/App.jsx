@@ -1428,11 +1428,13 @@ export default function App() {
         reactions: {},
         unsent_at: new Date().toISOString(),
       } : m));
-      // Reload conversations to update preview
-      if (session?.user?.id) {
-        loadConversations(session.user.id);
-        loadRecentMessages(session.user.id);
-      }
+      // Update conversation preview locally
+      setDbConversations((prev) => prev.map((c) => {
+        if (c.id === msg.conversation_id) {
+          return { ...c, last_message_preview: "You unsent this message" };
+        }
+        return c;
+      }));
     } catch (err) {
       showError("Could not unsend: " + (err?.message || "Please try again."));
     }
@@ -2887,6 +2889,52 @@ export default function App() {
   }
 
   /* ─── Camera & Media Preview ─── */
+
+  async function openCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: true,
+      });
+      // Create a video element to capture a frame
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.setAttribute("playsinline", "true");
+      await video.play();
+
+      // Create a canvas to capture the frame
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0);
+
+      // Stop all tracks
+      stream.getTracks().forEach((t) => t.stop());
+
+      // Convert to blob
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
+            const url = URL.createObjectURL(blob);
+            setMediaPreview(url);
+            setMediaPreviewFile(file);
+          }
+        },
+        "image/jpeg",
+        0.9
+      );
+    } catch (err) {
+      console.error("Camera error:", err);
+      if (err.name === "NotAllowedError") {
+        showError("Camera permission is required. Please allow camera access.");
+      } else {
+        // Fallback to file picker
+        cameraInputRef.current?.click();
+      }
+    }
+  }
 
   function handleCameraCapture(event) {
     const file = event.target.files?.[0];
@@ -4546,7 +4594,7 @@ export default function App() {
                 ) : (
                   <form className="ig-composer" onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}>
                     {/* Camera button */}
-                    <button type="button" className="ig-composer-btn" onClick={() => cameraInputRef.current?.click()} aria-label="Open camera">
+                    <button type="button" className="ig-composer-btn" onClick={openCamera} aria-label="Open camera">
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                     </button>
 
@@ -4850,6 +4898,9 @@ export default function App() {
 
             <h2>{getName(profile)}</h2>
             <div className="profile-handle">@{profile?.username || "member"}</div>
+            <div className="profile-email" style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>
+              📧 {session?.user?.email || ""}
+            </div>
 
             {profile?.location && (
               <div className="location" style={{ justifyContent: "center" }}>
@@ -4866,6 +4917,15 @@ export default function App() {
               onClick={() => setEditing(true)}
             >
               ✏️ Edit Profile
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={handleLogout}
+              disabled={loading}
+              style={{ marginTop: "8px", width: "100%" }}
+            >
+              {loading ? "Signing out..." : "🚪 Logout"}
             </button>
           </div>
 
