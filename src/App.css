@@ -5038,52 +5038,254 @@ footer {
    MESSAGE ACTIONS (hover)
    ============================ */
 
-.message-actions {
+/* ============================
+   MESSAGE ACTION MENU (Context Menu)
+   ============================ */
+
+.msg-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.msg-action-menu {
+  position: fixed;
+  z-index: 10000;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  min-width: 180px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  animation: menuSlideIn 0.15s ease;
+}
+
+@keyframes menuSlideIn {
+  from { opacity: 0; transform: translateX(-50%) scale(0.95) translateY(-4px); }
+  to { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
+}
+
+.msg-menu-item {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.15s;
-  align-self: center;
-  margin-left: 4px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.12s;
+  text-align: left;
+}
+
+.msg-menu-item:hover {
+  background: #f4f0ff;
+}
+
+.msg-menu-item.danger {
+  color: #dc2626;
+}
+
+.msg-menu-item.danger:hover {
+  background: #fef2f2;
+}
+
+.msg-menu-item.cancel {
+  color: #888;
+  justify-content: center;
+  font-size: 12px;
+  margin-top: 2px;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 8px;
+}
+
+.msg-menu-icon {
+  font-size: 15px;
+  width: 20px;
+  text-align: center;
   flex-shrink: 0;
 }
 
-.message-actions.mine {
-  margin-left: 0;
-  margin-right: 4px;
-  order: -1;
-  flex-direction: column;
-  align-items: flex-end;
+.msg-menu-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 4px 8px;
 }
 
-.message-row:hover .message-actions {
-  opacity: 1;
+/* ============================
+   VOICE MESSAGE PLAYER
+   ============================ */
+
+.voice-bubble {
+  min-width: 200px;
 }
 
-.message-action-btn {
-  background: none;
-  border: 1px solid #e5e1ee;
-  border-radius: 6px;
-  width: 26px;
-  height: 26px;
+.voice-message-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.voice-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #7435e8, #a53bd5);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+
+.voice-play-btn:hover {
+  transform: scale(1.05);
+}
+
+.voice-waveform {
+  flex: 1;
+  height: 6px;
+  background: #e5e1ee;
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 80px;
+}
+
+.voice-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #7435e8, #a53bd5);
+  border-radius: 3px;
+  transition: width 0.15s linear;
+}
+
+.voice-duration {
+  font-size: 11px;
+  color: #888;
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ============================
+   VOICE RECORDING BAR
+   ============================ */
+
+.voice-recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 4px 8px;
+}
+
+.voice-cancel-btn {
+  border: none;
+  background: none;
+  color: #888;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
-  padding: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
 }
 
-.message-action-btn:hover {
-  background: #f4efff;
-  border-color: #d1b8f7;
+.voice-cancel-btn:hover {
+  background: #f4f0f0;
 }
 
-.message-action-btn.delete-btn:hover {
-  background: #fef2f2;
-  border-color: #fca5a5;
+.voice-recording-indicator {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: recordingPulse 1s infinite;
+}
+
+@keyframes recordingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.recording-time {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-send-btn {
+  border: none;
+  background: linear-gradient(135deg, #7435e8, #a53bd5);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 20px;
+  transition: transform 0.12s;
+}
+
+.voice-send-btn:hover {
+  transform: scale(1.03);
+}
+
+/* ============================
+   UNSENT MESSAGE STYLE
+   ============================ */
+
+.message-row.unsent .message-bubble {
+  background: transparent !important;
+  border: 1px dashed #d1d5db;
+  box-shadow: none;
+}
+
+.unsent-text {
+  font-style: italic;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+/* ============================
+   SEND BUTTON ACTIVE STATE
+   ============================ */
+
+.chat-send-btn.send-active {
+  background: linear-gradient(135deg, #7435e8, #a53bd5);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+
+.chat-send-btn.send-active:hover {
+  transform: scale(1.03);
+}
+
+.chat-send-btn.mic-btn {
+  font-size: 18px;
+  padding: 6px 10px;
 }
 
 /* ============================
@@ -5215,7 +5417,7 @@ footer {
   }
 
   .message-actions {
-    opacity: 1;
+    display: none;
   }
 }
 
@@ -5766,6 +5968,38 @@ footer {
     font-size: 14px;
   }
 
+  /* --- Message context menu mobile --- */
+  .msg-action-menu {
+    left: 50% !important;
+    right: auto !important;
+    max-width: calc(100vw - 32px);
+  }
+
+  /* --- Voice message mobile --- */
+  .voice-message-player {
+    gap: 8px;
+  }
+
+  .voice-play-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+
+  .voice-waveform {
+    min-width: 60px;
+  }
+
+  .voice-recording-bar {
+    gap: 8px;
+  }
+
+  /* --- Chat input mobile --- */
+  .chat-input-area {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
   /* --- Features section --- */
   .features-section {
     grid-template-columns: 1fr;
@@ -5813,7 +6047,7 @@ footer {
   }
 
   .message-actions {
-    opacity: 1;
+    display: none;
   }
 
   /* --- Login page --- */

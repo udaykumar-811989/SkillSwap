@@ -52,6 +52,26 @@ export default function App() {
   const [replyTo, setReplyTo] = useState(null);
   const [showReactionPicker, setShowReactionPicker] = useState(null);
 
+  /* MESSAGE ACTION MENU STATE */
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [showMessageMenu, setShowMessageMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const longPressTimerRef = useRef(null);
+  const longPressMovedRef = useRef(false);
+
+  /* VOICE RECORDING STATE */
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingIntervalRef = useRef(null);
+  const audioStreamRef = useRef(null);
+
+  /* VOICE PLAYBACK STATE */
+  const [playingVoiceId, setPlayingVoiceId] = useState(null);
+  const [voiceProgress, setVoiceProgress] = useState({});
+  const audioPlayerRef = useRef(null);
+
   /* POINTS & SESSIONS STATE */
   const [skillPoints, setSkillPoints] = useState(0);
   const [teachingSessions, setTeachingSessions] = useState([]);
@@ -1301,6 +1321,308 @@ export default function App() {
     });
   }
 
+  /* ─── Message Action Menu (Long Press / Right Click) ─── */
+
+  function handleLongPressStart(e, msg) {
+    if (msg.sending || String(msg.id).startsWith("temp-")) return;
+    longPressMovedRef.current = false;
+    const timer = setTimeout(() => {
+      if (!longPressMovedRef.current) {
+        e.preventDefault();
+        showMessageMenuForMsg(msg, e);
+      }
+    }, 500);
+    longPressTimerRef.current = timer;
+  }
+
+  function handleLongPressMove() {
+    longPressMovedRef.current = true;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  function handleLongPressEnd() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  function showMessageMenuForMsg(msg, e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuHeight = 280;
+    const menuWidth = 220;
+    let top = rect.top - menuHeight - 8;
+    let left = e.clientX || rect.left + rect.width / 2;
+
+    if (top < 8) top = rect.bottom + 8;
+    if (left + menuWidth / 2 > window.innerWidth - 16) left = window.innerWidth - menuWidth / 2 - 16;
+    if (left - menuWidth / 2 < 16) left = menuWidth / 2 + 16;
+
+    setSelectedMessage(msg);
+    setMenuPosition({ top, left });
+    setShowMessageMenu(true);
+  }
+
+  function closeMessageMenu() {
+    setShowMessageMenu(false);
+    setSelectedMessage(null);
+  }
+
+  async function copyMessage(msg) {
+    const text = msg.content?.startsWith("[image:") ? "[Image]"
+      : msg.content?.startsWith("[video:") ? "[Video]"
+      : msg.content?.startsWith("[voice:") ? "[Voice message]"
+      : msg.content || "";
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage("Copied to clipboard");
+      setTimeout(() => setMessage(""), 2000);
+    } catch {
+      setMessage("Could not copy");
+      setTimeout(() => setMessage(""), 2000);
+    }
+    closeMessageMenu();
+  }
+
+  async function deleteForMe(msg) {
+    if (!msg.id || String(msg.id).startsWith("temp-")) return;
+    try {
+      const { error } = await supabase.rpc("hide_message_for_me", { p_message_id: msg.id });
+      if (error) throw error;
+      setChatMessages((prev) => prev.filter((m) => m.id !== msg.id));
+      setMessage("Message removed for you");
+      setTimeout(() => setMessage(""), 2000);
+    } catch (err) {
+      showError("Could not delete message: " + (err?.message || "Please try again."));
+    }
+    closeMessageMenu();
+  }
+
+  async function unsendMsg(msg) {
+    if (!msg.id || String(msg.id).startsWith("temp-")) return;
+    try {
+      const { error } = await supabase.rpc("unsend_message", { p_message_id: msg.id });
+      if (error) throw error;
+      setChatMessages((prev) => prev.map((m) => m.id === msg.id ? {
+        ...m,
+        content: "You unsent this message",
+        message_type: "text",
+        media_url: "",
+        duration: 0,
+        reactions: {},
+        unsent_at: new Date().toISOString(),
+      } : m));
+    } catch (err) {
+      showError("Could not unsend: " + (err?.message || "Please try again."));
+    }
+    closeMessageMenu();
+  }
+
+  /* ─── Voice Recording ─── */
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        const chunks = audioChunksRef.current;
+        if (chunks.length > 0 && isRecording) {
+          sendVoiceMessage(chunks);
+        }
+        cleanupRecording();
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      if (err.name === "NotAllowedError") {
+        showError("Microphone permission is required to record a voice message.");
+      } else {
+        showError("Could not access microphone: " + (err?.message || "Please try again."));
+      }
+    }
+  }
+
+  function stopRecording(send = true) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      if (!send) {
+        audioChunksRef.current = [];
+      }
+      mediaRecorderRef.current.stop();
+    }
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    setIsRecording(false);
+    setRecordingTime(0);
+  }
+
+  function cancelRecording() {
+    audioChunksRef.current = [];
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    cleanupRecording();
+    setIsRecording(false);
+    setRecordingTime(0);
+  }
+
+  function cleanupRecording() {
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+  }
+
+  async function sendVoiceMessage(chunks) {
+    if (!session?.user?.id || !activeChatUser?.id) return;
+    try {
+      setSendingMessage(true);
+      const blob = new Blob(chunks, { type: "audio/webm" });
+      const fileExt = "webm";
+      const filePath = `voice-messages/${session.user.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("voice-messages").upload(filePath, blob);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("voice-messages").getPublicUrl(filePath);
+      const voiceUrl = urlData?.publicUrl || "";
+
+      const duration = recordingTime || 1;
+      const content = `[voice:${voiceUrl}]`;
+
+      const tempId = "temp-voice-" + Date.now();
+      const optimisticMsg = {
+        id: tempId,
+        sender_id: session.user.id,
+        receiver_id: activeChatUser.id,
+        content,
+        message_type: "voice",
+        media_url: voiceUrl,
+        duration,
+        created_at: new Date().toISOString(),
+        status: "sent",
+        sending: true,
+        reactions: {},
+      };
+      setChatMessages((prev) => [...prev, optimisticMsg]);
+
+      const connection = connectionFor(activeChatUser.id);
+      const payload = {
+        sender_id: session.user.id,
+        receiver_id: activeChatUser.id,
+        content,
+        message_type: "voice",
+        media_url: voiceUrl,
+        duration,
+        status: "sent",
+        reactions: {},
+      };
+      if (activeConversationId) payload.conversation_id = activeConversationId;
+      if (connection?.id) payload.connection_id = connection.id;
+
+      const { data, error: sendError } = await supabase
+        .from("messages").insert(payload).select().single();
+      if (sendError) throw sendError;
+
+      setChatMessages((prev) =>
+        prev.map((msg) => (msg.id === tempId ? data || { ...msg, sending: false } : msg))
+      );
+      await loadRecentMessages(session.user.id);
+      loadConversations(session.user.id);
+    } catch (err) {
+      showError("Could not send voice message: " + (err?.message || "Please try again."));
+      setChatMessages((prev) => prev.filter((msg) => !String(msg.id).startsWith("temp-voice-")));
+    } finally {
+      setSendingMessage(false);
+    }
+  }
+
+  /* ─── Voice Playback ─── */
+
+  function toggleVoicePlayback(msg) {
+    const url = msg.media_url;
+    if (!url) return;
+
+    if (playingVoiceId === msg.id) {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current = null;
+      }
+      setPlayingVoiceId(null);
+      return;
+    }
+
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+    }
+
+    const audio = new Audio(url);
+    audioPlayerRef.current = audio;
+    setPlayingVoiceId(msg.id);
+    setVoiceProgress((prev) => ({ ...prev, [msg.id]: 0 }));
+
+    audio.ontimeupdate = () => {
+      setVoiceProgress((prev) => ({
+        ...prev,
+        [msg.id]: audio.duration ? (audio.currentTime / audio.duration) * 100 : 0,
+      }));
+    };
+
+    audio.onended = () => {
+      setPlayingVoiceId(null);
+      setVoiceProgress((prev) => ({ ...prev, [msg.id]: 100 }));
+      audioPlayerRef.current = null;
+    };
+
+    audio.onerror = () => {
+      setPlayingVoiceId(null);
+      audioPlayerRef.current = null;
+      showError("Could not play voice message");
+    };
+
+    audio.play().catch(() => {
+      setPlayingVoiceId(null);
+      audioPlayerRef.current = null;
+    });
+  }
+
+  function formatRecordingTime(secs) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  function formatVoiceDuration(secs) {
+    if (!secs) return "0:00";
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
   function subscribeToPresence(userId) {
     if (!userId) return;
     if (presenceChannelRef.current) {
@@ -2151,6 +2473,9 @@ export default function App() {
           const newMsg = payload.new;
           if (!newMsg) return;
 
+          // If message was hidden for current user, don't show it
+          if (newMsg.hidden_for && newMsg.hidden_for.includes(myId)) return;
+
           // If message belongs to currently open chat
           if (
             activeChatUser &&
@@ -2182,7 +2507,13 @@ export default function App() {
           const updatedMsg = payload.new;
           if (!updatedMsg) return;
 
-          // Update message in current chat (for reactions, status changes, etc.)
+          // If message was hidden for current user, remove from chat
+          if (updatedMsg.hidden_for && updatedMsg.hidden_for.includes(myId)) {
+            setChatMessages((prev) => prev.filter((m) => m.id !== updatedMsg.id));
+            return;
+          }
+
+          // Update message in current chat (for reactions, status changes, unsent, etc.)
           if (
             activeChatUser &&
             ((updatedMsg.sender_id === activeChatUser.id && updatedMsg.receiver_id === myId) ||
@@ -2331,28 +2662,6 @@ export default function App() {
       setChatMessages((prev) => prev.filter((msg) => msg.id !== tempId));
     } finally {
       setSendingMessage(false);
-    }
-  }
-
-  async function unsendMessage(messageId) {
-    if (!messageId || messageId.startsWith("temp-")) return;
-    try {
-      const { error } = await supabase
-        .from("messages")
-        .delete()
-        .eq("id", messageId)
-        .eq("sender_id", session?.user?.id);
-      if (error) {
-        console.error("Unsend error:", error);
-        showError("Could not unsend message: " + error.message);
-        return;
-      }
-      setChatMessages((prev) => prev.filter((msg) => msg.id !== messageId));
-      if (session?.user?.id) {
-        loadConversations(session.user.id);
-      }
-    } catch (err) {
-      console.error("Unsend message error:", err);
     }
   }
 
@@ -3710,8 +4019,11 @@ export default function App() {
 
                 {/* Messages Stream - Direct container scrolling */}
                 <div className="real-chat-messages" ref={messagesContainerRef} onClick={(e) => {
-                  if (showReactionPicker && !e.target.closest(".reaction-picker") && !e.target.closest(".reaction-option") && !e.target.closest(".message-action-btn")) {
+                  if (showReactionPicker && !e.target.closest(".reaction-picker") && !e.target.closest(".reaction-option")) {
                     setShowReactionPicker(null);
+                  }
+                  if (showMessageMenu && !e.target.closest(".msg-action-menu")) {
+                    closeMessageMenu();
                   }
                 }}>
                   {loadingChat ? (
@@ -3733,17 +4045,33 @@ export default function App() {
                       const isMine = msg.sender_id === session?.user?.id;
                       const isImageMsg = msg.content?.startsWith("[image:");
                       const isVideoMsg = msg.content?.startsWith("[video:");
+                      const isVoiceMsg = msg.message_type === "voice" || msg.content?.startsWith("[voice:");
+                      const isUnsent = !!msg.unsent_at;
                       const mediaUrl = (isImageMsg || isVideoMsg)
                         ? msg.content.replace(/\[image:|\[video:|\]/g, "")
-                        : null;
+                        : isVoiceMsg ? msg.media_url : null;
                       const reactions = msg.reactions || {};
                       const reactionEntries = Object.entries(reactions).filter(([, users]) => users.length > 0);
 
                       return (
                         <div
                           key={msg.id || index}
-                          className={`message-row ${isMine ? "mine" : ""}`}
+                          className={`message-row ${isMine ? "mine" : ""} ${isUnsent ? "unsent" : ""}`}
                           style={{ position: "relative" }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            if (!msg.sending && !String(msg.id).startsWith("temp-")) {
+                              showMessageMenuForMsg(msg, e);
+                            }
+                          }}
+                          onPointerDown={(e) => {
+                            if (!msg.sending && !String(msg.id).startsWith("temp-")) {
+                              handleLongPressStart(e, msg);
+                            }
+                          }}
+                          onPointerMove={handleLongPressMove}
+                          onPointerUp={handleLongPressEnd}
+                          onPointerLeave={handleLongPressEnd}
                         >
                           {!isMine && (
                             <div
@@ -3771,45 +4099,71 @@ export default function App() {
                               }}>
                                 <span className="reply-preview-name">{msg.reply_to_sender_name || "Message"}</span>
                                 <span className="reply-preview-text">
-                                  {msg.reply_to_content.startsWith("[image:") ? "📷 Photo" :
-                                   msg.reply_to_content.startsWith("[video:") ? "🎥 Video" :
+                                  {msg.reply_to_content.startsWith("[image:") ? "Photo" :
+                                   msg.reply_to_content.startsWith("[video:") ? "Video" :
+                                   msg.reply_to_content.startsWith("[voice:") ? "Voice message" :
                                    msg.reply_to_content.length > 60 ? msg.reply_to_content.slice(0, 60) + "..." : msg.reply_to_content}
                                 </span>
                               </div>
                             )}
 
-                            <div className="message-bubble" data-msg-id={msg.id}>
-                              {isImageMsg && mediaUrl && (
+                            <div className={`message-bubble ${isVoiceMsg ? "voice-bubble" : ""}`} data-msg-id={msg.id}>
+                              {isUnsent ? (
+                                <span className="unsent-text">{msg.content || "You unsent this message"}</span>
+                              ) : isVoiceMsg ? (
+                                <div className="voice-message-player">
+                                  <button
+                                    className="voice-play-btn"
+                                    onClick={(e) => { e.stopPropagation(); toggleVoicePlayback(msg); }}
+                                    aria-label={playingVoiceId === msg.id ? "Pause voice message" : "Play voice message"}
+                                  >
+                                    {playingVoiceId === msg.id ? "⏸" : "▶"}
+                                  </button>
+                                  <div className="voice-waveform">
+                                    <div
+                                      className="voice-progress-bar"
+                                      style={{ width: `${voiceProgress[msg.id] || 0}%` }}
+                                    />
+                                  </div>
+                                  <span className="voice-duration">
+                                    {playingVoiceId === msg.id
+                                      ? formatRecordingTime(Math.floor((voiceProgress[msg.id] / 100) * (msg.duration || 0)))
+                                      : formatVoiceDuration(msg.duration)}
+                                  </span>
+                                </div>
+                              ) : isImageMsg && mediaUrl ? (
                                 <img
                                   src={mediaUrl}
                                   alt="Shared image"
                                   style={{ maxWidth: "240px", borderRadius: "8px", display: "block", marginBottom: "4px", cursor: "pointer" }}
                                   onClick={() => setLightboxUrl(mediaUrl)}
                                 />
-                              )}
-                              {isVideoMsg && mediaUrl && (
+                              ) : isVideoMsg && mediaUrl ? (
                                 <video
                                   src={mediaUrl}
                                   controls
                                   style={{ maxWidth: "240px", borderRadius: "8px", display: "block", marginBottom: "4px" }}
                                 />
+                              ) : (
+                                msg.content
                               )}
-                              {!isImageMsg && !isVideoMsg && msg.content}
-                              <div className="message-bubble-footer">
-                                <span>{formatTime(msg.created_at)}</span>
-                                {msg.sending && (
-                                  <span style={{ opacity: 0.8, fontSize: "11px" }}>🕒</span>
-                                )}
-                                {isMine && !msg.sending && msg.id && !String(msg.id).startsWith("temp-") && (
-                                  <span className={`message-status ${msg.status || "sent"}`}>
-                                    {msg.status === "seen" ? "✓✓" : msg.status === "delivered" ? "✓✓" : "✓"}
-                                  </span>
-                                )}
-                              </div>
+                              {!isUnsent && (
+                                <div className="message-bubble-footer">
+                                  <span>{formatTime(msg.created_at)}</span>
+                                  {msg.sending && (
+                                    <span style={{ opacity: 0.8, fontSize: "11px" }}>Sending...</span>
+                                  )}
+                                  {isMine && !msg.sending && msg.id && !String(msg.id).startsWith("temp-") && (
+                                    <span className={`message-status ${msg.status || "sent"}`}>
+                                      {msg.status === "seen" ? "✓✓" : msg.status === "delivered" ? "✓✓" : "✓"}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             {/* Reactions display */}
-                            {reactionEntries.length > 0 && (
+                            {!isUnsent && reactionEntries.length > 0 && (
                               <div className={`message-reactions ${isMine ? "mine" : ""}`}>
                                 {reactionEntries.map(([emoji, users]) => (
                                   <button
@@ -3844,53 +4198,56 @@ export default function App() {
                               </div>
                             )}
                           </div>
-
-                          {/* Action buttons (reply + delete/unsend) */}
-                          <div className={`message-actions ${isMine ? "mine" : ""}`}>
-                            <button
-                              className="message-action-btn"
-                              onClick={() => startReply(msg)}
-                              title="Reply"
-                            >
-                              ↩
-                            </button>
-                            {!isMine && (
-                              <button
-                                className="message-action-btn"
-                                onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                                title="React"
-                              >
-                                😊
-                              </button>
-                            )}
-                            {isMine && !msg.sending && msg.id && !String(msg.id).startsWith("temp-") && (
-                              <>
-                                <button
-                                  className="message-action-btn"
-                                  onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                                  title="React"
-                                >
-                                  😊
-                                </button>
-                                <button
-                                  className="message-action-btn delete-btn"
-                                  onClick={() => {
-                                    if (confirm("Unsend this message? It will be deleted for both users.")) {
-                                      unsendMessage(msg.id);
-                                    }
-                                  }}
-                                  title="Unsend message"
-                                >
-                                  🗑️
-                                </button>
-                              </>
-                            )}
-                          </div>
                         </div>
                       );
                     })
                   )}
                 </div>
+
+                {/* Message Action Menu (Context Menu) */}
+                {showMessageMenu && selectedMessage && (
+                  <div className="msg-menu-overlay" onClick={closeMessageMenu}>
+                    <div
+                      className="msg-action-menu"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        top: menuPosition.top,
+                        left: menuPosition.left,
+                        transform: "translateX(-50%)",
+                      }}
+                    >
+                      <button className="msg-menu-item" onClick={() => { startReply(selectedMessage); closeMessageMenu(); }}>
+                        <span className="msg-menu-icon">↩</span> Reply
+                      </button>
+                      {selectedMessage.message_type !== "voice" && (
+                        <button className="msg-menu-item" onClick={() => copyMessage(selectedMessage)}>
+                          <span className="msg-menu-icon">📋</span> Copy
+                        </button>
+                      )}
+                      <button className="msg-menu-item" onClick={() => { setShowReactionPicker(selectedMessage.id); closeMessageMenu(); }}>
+                        <span className="msg-menu-icon">😊</span> React
+                      </button>
+                      <div className="msg-menu-divider" />
+                      <button className="msg-menu-item" onClick={() => deleteForMe(selectedMessage)}>
+                        <span className="msg-menu-icon">🗑</span> Delete for me
+                      </button>
+                      {selectedMessage.sender_id === session?.user?.id && !String(selectedMessage.id).startsWith("temp-") && (
+                        <button className="msg-menu-item danger" onClick={() => {
+                          if (confirm("Unsend this message? It will be removed for everyone.")) {
+                            unsendMsg(selectedMessage);
+                          } else {
+                            closeMessageMenu();
+                          }
+                        }}>
+                          <span className="msg-menu-icon">🚫</span> Unsend
+                        </button>
+                      )}
+                      <button className="msg-menu-item cancel" onClick={closeMessageMenu}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Icebreaker Suggestions */}
                 <div className="icebreakers-bar">
@@ -3945,8 +4302,9 @@ export default function App() {
                       <div className="reply-bar-info">
                         <span className="reply-bar-name">Replying to {replyTo.sender_name}</span>
                         <span className="reply-bar-text">
-                          {replyTo.content?.startsWith("[image:") ? "📷 Photo" :
-                           replyTo.content?.startsWith("[video:") ? "🎥 Video" :
+                          {replyTo.content?.startsWith("[image:") ? "Photo" :
+                           replyTo.content?.startsWith("[video:") ? "Video" :
+                           replyTo.content?.startsWith("[voice:") ? "Voice message" :
                            (replyTo.content || "").length > 50 ? replyTo.content.slice(0, 50) + "..." : replyTo.content}
                         </span>
                       </div>
@@ -3968,38 +4326,76 @@ export default function App() {
                     onChange={handleFileUpload}
                     style={{ display: "none" }}
                   />
-                  <button
-                    type="button"
-                    className="chat-send-btn"
-                    onClick={() => chatFileInputRef.current?.click()}
-                    title="Share photo or video"
-                    style={{ fontSize: "16px", padding: "8px 10px" }}
-                  >
-                    📎
-                  </button>
-                  <input
-                    value={messageInput}
-                    onChange={(e) => {
-                      setMessageInput(e.target.value);
-                      broadcastTyping(true);
-                      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-                      typingTimeoutRef.current = setTimeout(() => {
-                        broadcastTyping(false);
-                      }, 3000);
-                    }}
-                    placeholder={`Type a message to ${getName(activeChatUser)}... (Press Enter to send)`}
-                    disabled={sendingMessage}
-                    autoFocus
-                    style={{ flex: 1 }}
-                  />
 
-                  <button
-                    type="submit"
-                    className="chat-send-btn"
-                    disabled={!messageInput.trim() || sendingMessage}
-                  >
-                    {sendingMessage ? "Sending..." : "Send →"}
-                  </button>
+                  {/* Recording UI */}
+                  {isRecording ? (
+                    <div className="voice-recording-bar">
+                      <button
+                        type="button"
+                        className="voice-cancel-btn"
+                        onClick={cancelRecording}
+                      >
+                        Cancel
+                      </button>
+                      <div className="voice-recording-indicator">
+                        <span className="recording-dot" />
+                        <span className="recording-time">{formatRecordingTime(recordingTime)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="voice-send-btn"
+                        onClick={() => stopRecording(true)}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="chat-send-btn"
+                        onClick={() => chatFileInputRef.current?.click()}
+                        title="Share photo or video"
+                        style={{ fontSize: "16px", padding: "8px 10px" }}
+                      >
+                        📎
+                      </button>
+                      <input
+                        value={messageInput}
+                        onChange={(e) => {
+                          setMessageInput(e.target.value);
+                          broadcastTyping(true);
+                          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                          typingTimeoutRef.current = setTimeout(() => {
+                            broadcastTyping(false);
+                          }, 3000);
+                        }}
+                        placeholder={`Message ${getName(activeChatUser)}...`}
+                        disabled={sendingMessage}
+                        autoFocus
+                        style={{ flex: 1 }}
+                      />
+
+                      {messageInput.trim() ? (
+                        <button
+                          type="submit"
+                          className="chat-send-btn send-active"
+                          disabled={sendingMessage}
+                        >
+                          {sendingMessage ? "..." : "Send"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="chat-send-btn mic-btn"
+                          onClick={startRecording}
+                          title="Record voice message"
+                        >
+                          🎤
+                        </button>
+                      )}
+                    </>
+                  )}
                 </form>
               </>
             ) : (
