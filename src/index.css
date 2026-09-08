@@ -1,0 +1,75 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+:root {
+  --primary: #7435e8;
+  --primary-hover: #6028cb;
+  --primary-light: #f5efff;
+  --primary-gradient: linear-gradient(135deg, #7136e8, #a734d6, #ef8a28);
+  --primary-glow: rgba(116, 53, 232, 0.15);
+  
+  --bg-main: #ffffff;
+  --bg-soft: #faf9fd;
+  --bg-card: #ffffff;
+  
+  --border-light: #eceaf2;
+  --border-focus: #bca4f5;
+  
+  --text-main: #171725;
+  --text-muted: #787788;
+  --text-dim: #a09fad;
+  
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-full: 9999px;
+  
+  --shadow-sm: 0 2px 8px rgba(35, 20, 65, 0.04);
+  --shadow-md: 0 8px 24px rgba(35, 20, 65, 0.07);
+  --shadow-lg: 0 16px 40px rgba(35, 20, 65, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg-main);
+  color: var(--text-main);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+#root {
+  min-height: 100vh;
+}
