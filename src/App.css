@@ -1670,90 +1670,8 @@ footer {
 }
 
 /* =========================
-   RESPONSIVE
+   RESPONSIVE (consolidated at bottom of file)
 ========================= */
-
-@media (max-width: 950px) {
-  .hero-section {
-    flex-direction: column;
-    text-align: center;
-    padding-top: 40px;
-  }
-
-  .hero-copy {
-    max-width: 650px;
-  }
-
-  .hero-copy > p {
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .hero-actions,
-  .trust-row {
-    justify-content: center;
-  }
-
-  .hero-visual {
-    width: 360px;
-    min-width: 360px;
-  }
-
-  .profile-dashboard {
-    grid-template-columns: 1fr;
-  }
-
-  .chat-container-layout {
-    grid-template-columns: 280px 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .navbar {
-    height: 60px;
-  }
-
-  .inside-page.chat-view-page {
-    padding: 4px 0 0;
-    height: calc(100vh - 60px);
-    width: 100%;
-  }
-
-  .chat-container-layout {
-    grid-template-columns: 1fr;
-    height: 100%;
-    border-radius: 12px;
-  }
-
-  .chat-inbox-sidebar.hidden-mobile {
-    display: none;
-  }
-
-  .real-chat-main.hidden-mobile {
-    display: none;
-  }
-
-  .features-section {
-    grid-template-columns: 1fr;
-    padding: 20px;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-
-  .message-bubble {
-    max-width: 85%;
-  }
-
-  .chat-input-area {
-    padding: 10px 12px;
-  }
-
-  .chat-send-btn {
-    padding: 0 16px;
-  }
-}
 
 /* =========================
    ACCOUNT DROPDOWN MENU
@@ -5590,5 +5508,596 @@ footer {
 
   .public-profile-section {
     padding: 16px;
+  }
+}
+
+/* ============================
+   TABLET (max-width: 950px)
+   ============================ */
+
+@media (max-width: 950px) {
+  .hero-section {
+    flex-direction: column;
+    text-align: center;
+    padding-top: 40px;
+  }
+
+  .hero-copy {
+    max-width: 650px;
+  }
+
+  .hero-copy > p {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero-actions,
+  .trust-row {
+    justify-content: center;
+  }
+
+  .hero-visual {
+    width: 360px;
+    min-width: 360px;
+  }
+
+  .profile-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-container-layout {
+    grid-template-columns: 280px 1fr;
+  }
+}
+
+/* ============================
+   MOBILE (max-width: 768px)
+   ============================ */
+
+@media (max-width: 768px) {
+  /* --- Navbar: keep as top bar but compact --- */
+  .navbar {
+    height: 56px;
+  }
+
+  .nav-content {
+    width: 100%;
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .brand {
+    font-size: 16px;
+    gap: 6px;
+  }
+
+  .brand span {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+
+  .navigation {
+    gap: 2px;
+    padding: 3px;
+    overflow-x: auto;
+    flex-shrink: 1;
+    min-width: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .navigation::-webkit-scrollbar {
+    display: none;
+  }
+
+  .navigation button {
+    padding: 6px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    gap: 4px;
+    min-height: 36px;
+  }
+
+  .account-area {
+    gap: 6px;
+  }
+
+  .small-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+
+  /* --- Inside page --- */
+  .inside-page {
+    width: 100%;
+    padding: 16px 12px 80px;
+  }
+
+  .inside-page.chat-view-page {
+    padding: 4px 0 0;
+    height: calc(100vh - 56px);
+    width: 100%;
+  }
+
+  .inside-header h1 {
+    font-size: 22px;
+  }
+
+  /* --- Chat layout --- */
+  .chat-container-layout {
+    grid-template-columns: 1fr;
+    height: 100%;
+    border-radius: 12px;
+  }
+
+  .chat-inbox-sidebar.hidden-mobile {
+    display: none;
+  }
+
+  .real-chat-main.hidden-mobile {
+    display: none;
+  }
+
+  /* --- Profile grid --- */
+  .profile-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .person-card {
+    padding: 18px;
+  }
+
+  .person-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 20px;
+  }
+
+  /* --- Features section --- */
+  .features-section {
+    grid-template-columns: 1fr;
+    padding: 20px;
+    gap: 20px;
+  }
+
+  /* --- Form rows --- */
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* --- Message bubbles --- */
+  .message-bubble {
+    max-width: 85%;
+  }
+
+  .message-bubble-wrapper {
+    max-width: 85%;
+  }
+
+  /* --- Chat input --- */
+  .chat-input-area {
+    padding: 10px 12px;
+  }
+
+  .chat-send-btn {
+    padding: 0 14px;
+  }
+
+  /* --- Login page --- */
+  .login-page {
+    padding: 16px;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+
+  .login-card {
+    padding: 32px 24px;
+    border-radius: 20px;
+  }
+
+  .login-card h2 {
+    font-size: 24px;
+  }
+
+  .login-brand {
+    font-size: 20px;
+    margin-bottom: 24px;
+  }
+
+  /* --- Points card --- */
+  .points-card {
+    padding: 22px 20px;
+  }
+
+  .points-balance {
+    font-size: 48px;
+    letter-spacing: -2px;
+  }
+
+  .points-balance-label {
+    font-size: 18px;
+  }
+
+  /* --- Edit profile --- */
+  .edit-profile-card {
+    padding: 20px;
+    max-width: 100%;
+  }
+
+  .edit-header h2 {
+    font-size: 22px;
+  }
+
+  /* --- Sessions page --- */
+  .sessions-header {
+    flex-direction: column;
+  }
+
+  .sessions-header h1 {
+    font-size: 22px;
+  }
+
+  .sessions-tabs {
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .session-tab {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .sessions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* --- Rewards page --- */
+  .rewards-page {
+    padding: 16px 12px 80px;
+  }
+
+  .rewards-header h1 {
+    font-size: 22px;
+  }
+
+  .rewards-balance-card {
+    padding: 24px 16px;
+    border-radius: 16px;
+  }
+
+  .rewards-balance-num {
+    font-size: 42px;
+  }
+
+  .rewards-earn-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .rewards-earn-card .primary-button {
+    width: 100%;
+  }
+
+  /* --- Modal --- */
+  .modal-card {
+    margin: 10px;
+    max-height: 90vh;
+  }
+
+  .modal-body .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* --- Live session --- */
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .video-card.local-video {
+    display: none;
+  }
+
+  .live-workspace {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: 100;
+  }
+
+  .live-chat-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: 100;
+  }
+
+  .live-controls {
+    gap: 4px;
+    padding: 8px 10px;
+  }
+
+  .live-ctrl-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .live-topbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .live-session-title {
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+  }
+
+  /* --- Call overlay --- */
+  .call-controls {
+    padding: 12px 16px;
+    gap: 10px;
+    bottom: 20px;
+  }
+
+  .call-control-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 17px;
+  }
+
+  .local-video {
+    width: 90px;
+    height: 120px;
+    top: 10px;
+    right: 10px;
+  }
+
+  .incoming-call-card {
+    padding: 24px;
+    margin: 10px;
+  }
+
+  /* --- Profile dashboard --- */
+  .profile-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-main-card {
+    padding: 24px 18px;
+  }
+
+  .large-avatar {
+    width: 88px;
+    height: 88px;
+    font-size: 30px;
+  }
+
+  /* --- Footer --- */
+  .footer-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+  }
+
+  /* --- Reward toast --- */
+  .reward-toast {
+    right: 12px;
+    left: 12px;
+    max-width: 100%;
+    top: 68px;
+  }
+
+  /* --- Notices --- */
+  .notice,
+  .error-notice {
+    width: calc(100% - 24px);
+    left: 12px;
+    right: 12px;
+  }
+
+  /* --- Public profile --- */
+  .public-profile {
+    padding: 12px;
+  }
+
+  .public-profile-hero {
+    padding: 24px 16px;
+  }
+
+  .public-profile-name {
+    font-size: 20px;
+  }
+
+  .public-profile-stats {
+    gap: 24px;
+  }
+
+  .stat-number {
+    font-size: 18px;
+  }
+
+  .public-profile-actions {
+    flex-direction: column;
+  }
+
+  .public-profile-actions .primary-button,
+  .public-profile-actions .secondary-button {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .public-profile-section {
+    padding: 16px;
+  }
+
+  /* --- Reaction picker --- */
+  .reaction-picker {
+    gap: 0;
+    padding: 4px 6px;
+  }
+
+  .reaction-option {
+    font-size: 16px;
+    padding: 3px 4px;
+  }
+
+  .message-actions {
+    opacity: 1;
+  }
+
+  .reply-bar-text {
+    max-width: 200px;
+  }
+}
+
+/* ============================
+   SMALL PHONES (max-width: 480px)
+   ============================ */
+
+@media (max-width: 480px) {
+  .navbar {
+    height: 52px;
+  }
+
+  .brand {
+    font-size: 15px;
+  }
+
+  .brand span {
+    width: 26px;
+    height: 26px;
+    font-size: 13px;
+  }
+
+  .navigation button {
+    padding: 5px 8px;
+    font-size: 11px;
+    gap: 3px;
+  }
+
+  .inside-page {
+    padding: 12px 10px 80px;
+  }
+
+  .inside-header h1 {
+    font-size: 20px;
+  }
+
+  .person-card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .person-card h3 {
+    font-size: 16px;
+  }
+
+  .login-card {
+    padding: 24px 18px;
+    border-radius: 16px;
+  }
+
+  .login-card h2 {
+    font-size: 22px;
+  }
+
+  .login-brand {
+    font-size: 18px;
+    margin-bottom: 20px;
+  }
+
+  .login-brand-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .points-balance {
+    font-size: 40px;
+  }
+
+  .edit-profile-card {
+    padding: 16px;
+  }
+
+  .edit-header h2 {
+    font-size: 20px;
+  }
+
+  .rewards-balance-card {
+    padding: 20px 14px;
+  }
+
+  .rewards-balance-num {
+    font-size: 36px;
+  }
+
+  .session-tab {
+    padding: 7px 8px;
+    font-size: 11px;
+  }
+
+  .call-control-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+
+  .incoming-call-card {
+    padding: 18px;
+    margin: 8px;
+  }
+
+  .large-avatar {
+    width: 76px;
+    height: 76px;
+    font-size: 26px;
+  }
+
+  .profile-main-card {
+    padding: 20px 14px;
+  }
+
+  .modal-card {
+    margin: 6px;
+    border-radius: 16px;
+  }
+}
+
+/* ============================
+   GLOBAL TOUCH TARGETS
+   ============================ */
+
+@media (max-width: 768px) {
+  button,
+  a,
+  [role="button"] {
+    min-height: 36px;
+  }
+
+  .connect-button,
+  .primary-button,
+  .secondary-button {
+    min-height: 44px;
+  }
+
+  .inbox-item {
+    min-height: 60px;
+  }
+
+  .navigation button {
+    min-height: 36px;
   }
 }
