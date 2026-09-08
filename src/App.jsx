@@ -77,6 +77,8 @@ export default function App() {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animFrameRef = useRef(null);
+  const isRecordingRef = useRef(false);
+  const recordingTimeRef = useRef(0);
 
   /* CAMERA & MEDIA STATE */
   const cameraInputRef = useRef(null);
@@ -1488,20 +1490,28 @@ export default function App() {
 
       recorder.onstop = () => {
         const chunks = audioChunksRef.current;
-        const wasRecording = isRecording;
+        const finalDuration = recordingTimeRef.current || 1;
         stopWaveform();
         cleanupRecording();
-        if (chunks.length > 0 && wasRecording) {
-          sendVoiceMessage(chunks);
+        console.log("Recording stopped, chunks:", chunks.length, "duration:", finalDuration, "wasRecording:", isRecordingRef.current);
+        if (chunks.length > 0 && isRecordingRef.current) {
+          sendVoiceMessage(chunks, finalDuration);
+        } else {
+          console.warn("Voice recording: no chunks or not recording");
         }
+        isRecordingRef.current = false;
+        recordingTimeRef.current = 0;
       };
 
       recorder.start();
+      isRecordingRef.current = true;
+      recordingTimeRef.current = 0;
       setIsRecording(true);
       setRecordingTime(0);
       startWaveform(stream);
       recordingIntervalRef.current = setInterval(() => {
-        setRecordingTime((prev) => prev + 1);
+        recordingTimeRef.current += 1;
+        setRecordingTime(recordingTimeRef.current);
       }, 1000);
     } catch (err) {
       if (err.name === "NotAllowedError") {
@@ -1529,6 +1539,8 @@ export default function App() {
   }
 
   function cancelRecording() {
+    isRecordingRef.current = false;
+    recordingTimeRef.current = 0;
     audioChunksRef.current = [];
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
@@ -1551,8 +1563,11 @@ export default function App() {
     mediaRecorderRef.current = null;
   }
 
-  async function sendVoiceMessage(chunks) {
-    if (!session?.user?.id || !activeChatUser?.id) return;
+  async function sendVoiceMessage(chunks, duration = 1) {
+    if (!session?.user?.id || !activeChatUser?.id) {
+      console.warn("Voice message: missing user or chat partner");
+      return;
+    }
     try {
       setSendingMessage(true);
       const blob = new Blob(chunks, { type: "audio/webm" });
@@ -1561,13 +1576,15 @@ export default function App() {
 
       const { error: uploadError } = await supabase.storage
         .from("voice-messages").upload(filePath, blob);
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Voice upload error:", uploadError);
+        throw uploadError;
+      }
 
       const { data: urlData } = supabase.storage
         .from("voice-messages").getPublicUrl(filePath);
       const voiceUrl = urlData?.publicUrl || "";
 
-      const duration = recordingTime || 1;
       const content = `[voice:${voiceUrl}]`;
 
       const tempId = "temp-voice-" + Date.now();
@@ -1602,7 +1619,10 @@ export default function App() {
 
       const { data, error: sendError } = await supabase
         .from("messages").insert(payload).select().single();
-      if (sendError) throw sendError;
+      if (sendError) {
+        console.error("Voice message insert error:", sendError);
+        throw sendError;
+      }
 
       setChatMessages((prev) =>
         prev.map((msg) => (msg.id === tempId ? data || { ...msg, sending: false } : msg))
@@ -1610,6 +1630,7 @@ export default function App() {
       await loadRecentMessages(session.user.id);
       loadConversations(session.user.id);
     } catch (err) {
+      console.error("Voice send failed:", err);
       showError("Could not send voice message: " + (err?.message || "Please try again."));
       setChatMessages((prev) => prev.filter((msg) => !String(msg.id).startsWith("temp-voice-")));
     } finally {
