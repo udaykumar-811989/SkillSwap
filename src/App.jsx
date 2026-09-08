@@ -2,20 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
 
-const DEMO_USERS = [
-  {
-    id: "7a4e338a-d912-400f-ad3d-c9a7d8675d46",
-    name: "Uday Kumar C",
-    username: "uday",
-    email: "uday@skillswap.app",
-  },
-  {
-    id: "de118df6-ed5a-471b-89c9-6bc0b4e41bd2",
-    name: "Bhavana S",
-    username: "bhavana",
-    email: "bhavana@skillswap.app",
-  },
-];
+
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -1106,23 +1093,7 @@ export default function App() {
       }
 
       const loaded = data || [];
-      // Ensure both demo users are always available as profiles
-      const demoProfiles = DEMO_USERS
-        .filter(u => u.id !== userId)
-        .filter(u => !loaded.some(p => p.id === u.id))
-        .map(u => ({
-          id: u.id,
-          full_name: u.name,
-          name: u.name,
-          username: u.username,
-          email: u.email,
-          avatar_url: null,
-          skills_teach: ["Python", "JavaScript"],
-          skills_learn: ["React", "DSA"],
-          bio: "Demo user on SkillSwap",
-        }));
-
-      setProfiles([...loaded, ...demoProfiles]);
+      setProfiles(loaded);
     } finally {
       setLoadingProfiles(false);
     }
