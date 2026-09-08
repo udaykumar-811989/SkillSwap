@@ -1428,6 +1428,11 @@ export default function App() {
         reactions: {},
         unsent_at: new Date().toISOString(),
       } : m));
+      // Reload conversations to update preview
+      if (session?.user?.id) {
+        loadConversations(session.user.id);
+        loadRecentMessages(session.user.id);
+      }
     } catch (err) {
       showError("Could not unsend: " + (err?.message || "Please try again."));
     }
@@ -1642,8 +1647,12 @@ export default function App() {
 
   function toggleVoicePlayback(msg) {
     const url = msg.media_url;
-    if (!url) return;
+    if (!url) {
+      console.warn("Voice message has no URL");
+      return;
+    }
 
+    // Stop any currently playing audio
     if (playingVoiceId === msg.id) {
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
@@ -1655,12 +1664,20 @@ export default function App() {
 
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
+      audioPlayerRef.current = null;
     }
 
-    const audio = new Audio(url);
-    audioPlayerRef.current = audio;
-    setPlayingVoiceId(msg.id);
-    setVoiceProgress((prev) => ({ ...prev, [msg.id]: 0 }));
+    const audio = new Audio();
+    audio.crossOrigin = "anonymous";
+    audio.preload = "auto";
+
+    audio.oncanplay = () => {
+      audio.play().catch((err) => {
+        console.error("Voice play error:", err);
+        setPlayingVoiceId(null);
+        audioPlayerRef.current = null;
+      });
+    };
 
     audio.ontimeupdate = () => {
       setVoiceProgress((prev) => ({
@@ -1675,16 +1692,17 @@ export default function App() {
       audioPlayerRef.current = null;
     };
 
-    audio.onerror = () => {
+    audio.onerror = (e) => {
+      console.error("Voice audio error:", e, "URL:", url);
       setPlayingVoiceId(null);
       audioPlayerRef.current = null;
-      showError("Could not play voice message");
+      showError("Could not play voice message. The file may not be accessible.");
     };
 
-    audio.play().catch(() => {
-      setPlayingVoiceId(null);
-      audioPlayerRef.current = null;
-    });
+    audioPlayerRef.current = audio;
+    setPlayingVoiceId(msg.id);
+    setVoiceProgress((prev) => ({ ...prev, [msg.id]: 0 }));
+    audio.src = url;
   }
 
   function formatRecordingTime(secs) {
@@ -6265,11 +6283,11 @@ function renderLogin() {
             onClick={(e) => e.stopPropagation()}
             style={{ position: "relative" }}
           >
-            <button className="mobile-header-icon" onClick={() => setPage("chat")} title="Search">
+            <button className="mobile-header-icon" onClick={() => { setActiveChatUser(null); setPage("discover"); }} title="Search">
               🔍
             </button>
-            <button className="mobile-header-icon" onClick={() => setPage("chat")} title="Notifications">
-              🔔
+            <button className="mobile-header-icon" onClick={() => setPage("chat")} title="Messages">
+              💬
             </button>
             <div
               className="small-avatar account-avatar-btn"
