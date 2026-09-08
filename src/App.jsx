@@ -72,6 +72,17 @@ export default function App() {
   const [voiceProgress, setVoiceProgress] = useState({});
   const audioPlayerRef = useRef(null);
 
+  /* WAVEFORM VISUALIZATION STATE */
+  const [waveformData, setWaveformData] = useState(new Array(30).fill(0));
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animFrameRef = useRef(null);
+
+  /* CAMERA & MEDIA STATE */
+  const cameraInputRef = useRef(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
+  const [mediaPreviewFile, setMediaPreviewFile] = useState(null);
+
   /* POINTS & SESSIONS STATE */
   const [skillPoints, setSkillPoints] = useState(0);
   const [teachingSessions, setTeachingSessions] = useState([]);
@@ -1423,6 +1434,46 @@ export default function App() {
 
   /* ─── Voice Recording ─── */
 
+  function startWaveform(stream) {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      audioContextRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      function draw() {
+        analyser.getByteFrequencyData(dataArray);
+        const bars = [];
+        for (let i = 0; i < 30; i++) {
+          const val = dataArray[i % dataArray.length] / 255;
+          bars.push(Math.max(0.1, val));
+        }
+        setWaveformData(bars);
+        animFrameRef.current = requestAnimationFrame(draw);
+      }
+      draw();
+    } catch (e) {
+      // Waveform not critical, continue without it
+    }
+  }
+
+  function stopWaveform() {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setWaveformData(new Array(30).fill(0.1));
+  }
+
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1437,15 +1488,18 @@ export default function App() {
 
       recorder.onstop = () => {
         const chunks = audioChunksRef.current;
-        if (chunks.length > 0 && isRecording) {
+        const wasRecording = isRecording;
+        stopWaveform();
+        cleanupRecording();
+        if (chunks.length > 0 && wasRecording) {
           sendVoiceMessage(chunks);
         }
-        cleanupRecording();
       };
 
       recorder.start();
       setIsRecording(true);
       setRecordingTime(0);
+      startWaveform(stream);
       recordingIntervalRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
@@ -1465,6 +1519,7 @@ export default function App() {
       }
       mediaRecorderRef.current.stop();
     }
+    stopWaveform();
     if (recordingIntervalRef.current) {
       clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = null;
@@ -1478,6 +1533,7 @@ export default function App() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
+    stopWaveform();
     cleanupRecording();
     setIsRecording(false);
     setRecordingTime(0);
@@ -2791,6 +2847,95 @@ export default function App() {
     }
   }
 
+  /* ─── Camera & Media Preview ─── */
+
+  function handleCameraCapture(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      showError("Please capture an image or video.");
+      event.target.value = "";
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setMediaPreview(url);
+    setMediaPreviewFile(file);
+    event.target.value = "";
+  }
+
+  function handleMediaSelect(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      showError("Please select an image or video file.");
+      event.target.value = "";
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setMediaPreview(url);
+    setMediaPreviewFile(file);
+    event.target.value = "";
+  }
+
+  async function sendMediaMessage() {
+    if (!mediaPreviewFile || !session?.user?.id || !activeChatUser?.id) return;
+    setSendingMessage(true);
+    try {
+      const file = mediaPreviewFile;
+      const isImage = file.type.startsWith("image/");
+      let mediaUrl = "";
+
+      if (isImage) {
+        mediaUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error("Failed to read image"));
+          reader.readAsDataURL(file);
+        });
+      } else {
+        const fileExt = file.name.split(".").pop();
+        const filePath = `chat-media/${session.user.id}/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("chat-media").upload(filePath, file);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage
+          .from("chat-media").getPublicUrl(filePath);
+        mediaUrl = urlData?.publicUrl || "";
+      }
+
+      const mediaType = isImage ? "image" : "video";
+      const content = `[${mediaType}:${mediaUrl}]`;
+
+      const connection = connectionFor(activeChatUser.id);
+      const payload = {
+        sender_id: session.user.id,
+        receiver_id: activeChatUser.id,
+        content,
+      };
+      if (activeConversationId) payload.conversation_id = activeConversationId;
+      if (connection?.id) payload.connection_id = connection.id;
+
+      const { data, error: sendError } = await supabase
+        .from("messages").insert(payload).select().single();
+      if (sendError) throw sendError;
+
+      setChatMessages((prev) => [...prev, data]);
+      await loadRecentMessages(session.user.id);
+      loadConversations(session.user.id);
+    } catch (err) {
+      showError("Could not send media: " + (err?.message || "Please try again."));
+    } finally {
+      setSendingMessage(false);
+      cancelMediaPreview();
+    }
+  }
+
+  function cancelMediaPreview() {
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaPreview(null);
+    setMediaPreviewFile(null);
+  }
+
   /* =========================
      NOTIFICATIONS
   ========================= */
@@ -4053,6 +4198,13 @@ export default function App() {
                       const reactions = msg.reactions || {};
                       const reactionEntries = Object.entries(reactions).filter(([, users]) => users.length > 0);
 
+                      // Determine if this is the last seen message
+                      const isLastSeen = isMine && msg.status === "seen" && !String(msg.id).startsWith("temp-") && (
+                        index === chatMessages.length - 1 ||
+                        chatMessages[index + 1]?.sender_id !== session?.user?.id ||
+                        chatMessages[index + 1]?.status !== "seen"
+                      );
+
                       return (
                         <div
                           key={msg.id || index}
@@ -4159,6 +4311,9 @@ export default function App() {
                                     </span>
                                   )}
                                 </div>
+                              )}
+                              {isLastSeen && (
+                                <div className="seen-indicator">Seen</div>
                               )}
                             </div>
 
@@ -4294,7 +4449,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Chat Input Bar - Always Pinned & Visible */}
+                {/* Chat Input Bar - Instagram Style */}
                 {replyTo && (
                   <div className="reply-bar">
                     <div className="reply-bar-content">
@@ -4312,91 +4467,88 @@ export default function App() {
                     <button className="reply-bar-close" onClick={resetReply}>×</button>
                   </div>
                 )}
-                <form
-                  className="chat-input-area"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }}
-                >
-                  <input
-                    type="file"
-                    ref={chatFileInputRef}
-                    accept="image/*,video/*"
-                    onChange={handleFileUpload}
-                    style={{ display: "none" }}
-                  />
 
-                  {/* Recording UI */}
-                  {isRecording ? (
-                    <div className="voice-recording-bar">
-                      <button
-                        type="button"
-                        className="voice-cancel-btn"
-                        onClick={cancelRecording}
-                      >
-                        Cancel
-                      </button>
-                      <div className="voice-recording-indicator">
-                        <span className="recording-dot" />
-                        <span className="recording-time">{formatRecordingTime(recordingTime)}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="voice-send-btn"
-                        onClick={() => stopRecording(true)}
-                      >
-                        Send
-                      </button>
+                {/* Media Preview */}
+                {mediaPreview && (
+                  <div className="media-preview-bar">
+                    <img src={mediaPreview} alt="Preview" className="media-preview-img" />
+                    <button className="media-preview-cancel" onClick={cancelMediaPreview}>×</button>
+                    <button className="media-preview-send" onClick={sendMediaMessage} disabled={sendingMessage}>
+                      {sendingMessage ? "..." : "Send"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Hidden file inputs */}
+                <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture="environment"
+                  onChange={handleCameraCapture} style={{ display: "none" }} />
+                <input type="file" ref={chatFileInputRef} accept="image/*,video/*"
+                  onChange={handleMediaSelect} style={{ display: "none" }} />
+
+                {/* Recording UI */}
+                {isRecording ? (
+                  <div className="ig-recording-bar">
+                    <button type="button" className="ig-rec-cancel" onClick={cancelRecording} aria-label="Cancel recording">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <div className="ig-rec-indicator">
+                      <span className="ig-rec-dot" />
+                      <span className="ig-rec-time">{formatRecordingTime(recordingTime)}</span>
                     </div>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="chat-send-btn"
-                        onClick={() => chatFileInputRef.current?.click()}
-                        title="Share photo or video"
-                        style={{ fontSize: "16px", padding: "8px 10px" }}
-                      >
-                        📎
-                      </button>
-                      <input
-                        value={messageInput}
-                        onChange={(e) => {
-                          setMessageInput(e.target.value);
-                          broadcastTyping(true);
-                          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-                          typingTimeoutRef.current = setTimeout(() => {
-                            broadcastTyping(false);
-                          }, 3000);
-                        }}
-                        placeholder={`Message ${getName(activeChatUser)}...`}
-                        disabled={sendingMessage}
-                        autoFocus
-                        style={{ flex: 1 }}
-                      />
+                    <div className="ig-rec-waveform">
+                      {waveformData.map((val, i) => (
+                        <div key={i} className="ig-rec-bar" style={{ height: `${Math.max(4, val * 100)}%` }} />
+                      ))}
+                    </div>
+                    <button type="button" className="ig-rec-send" onClick={() => stopRecording(true)} aria-label="Send voice message">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                  </div>
+                ) : (
+                  <form className="ig-composer" onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}>
+                    {/* Camera button */}
+                    <button type="button" className="ig-composer-btn" onClick={() => cameraInputRef.current?.click()} aria-label="Open camera">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </button>
 
-                      {messageInput.trim() ? (
-                        <button
-                          type="submit"
-                          className="chat-send-btn send-active"
-                          disabled={sendingMessage}
-                        >
-                          {sendingMessage ? "..." : "Send"}
+                    {/* Text input */}
+                    <input
+                      className="ig-composer-input"
+                      value={messageInput}
+                      onChange={(e) => {
+                        setMessageInput(e.target.value);
+                        broadcastTyping(true);
+                        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                        typingTimeoutRef.current = setTimeout(() => broadcastTyping(false), 3000);
+                      }}
+                      placeholder="Message..."
+                      disabled={sendingMessage}
+                      autoFocus
+                    />
+
+                    {/* Right side: mic or send */}
+                    {messageInput.trim() ? (
+                      <button type="submit" className="ig-composer-btn ig-send-btn" disabled={sendingMessage} aria-label="Send message">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                      </button>
+                    ) : (
+                      <>
+                        {/* Mic button */}
+                        <button type="button" className="ig-composer-btn"
+                          onPointerDown={(e) => { e.preventDefault(); startRecording(); }}
+                          onPointerUp={() => {}}
+                          onPointerLeave={() => {}}
+                          aria-label="Record voice message">
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                         </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="chat-send-btn mic-btn"
-                          onClick={startRecording}
-                          title="Record voice message"
-                        >
-                          🎤
+                        {/* Image button */}
+                        <button type="button" className="ig-composer-btn" onClick={() => chatFileInputRef.current?.click()} aria-label="Share photo or video">
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                         </button>
-                      )}
-                    </>
-                  )}
-                </form>
+                      </>
+                    )}
+                  </form>
+                )}
               </>
             ) : (
               /* No Active Chat Selected Placeholder */
