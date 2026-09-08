@@ -84,6 +84,14 @@ export default function App() {
   const cameraInputRef = useRef(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [mediaPreviewFile, setMediaPreviewFile] = useState(null);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraMode, setCameraMode] = useState("photo"); // "photo" | "video"
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const cameraStreamRef = useRef(null);
+  const cameraVideoRef = useRef(null);
+  const cameraCanvasRef = useRef(null);
+  const mediaRecorderChunksRef = useRef([]);
+  const mediaRecorderRef2 = useRef(null);
 
   /* POINTS & SESSIONS STATE */
   const [skillPoints, setSkillPoints] = useState(0);
@@ -2893,47 +2901,93 @@ export default function App() {
   async function openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: true,
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: cameraMode === "video",
       });
-      // Create a video element to capture a frame
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      video.setAttribute("playsinline", "true");
-      await video.play();
-
-      // Create a canvas to capture the frame
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(video, 0, 0);
-
-      // Stop all tracks
-      stream.getTracks().forEach((t) => t.stop());
-
-      // Convert to blob
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
-            const url = URL.createObjectURL(blob);
-            setMediaPreview(url);
-            setMediaPreviewFile(file);
-          }
-        },
-        "image/jpeg",
-        0.9
-      );
+      cameraStreamRef.current = stream;
+      setShowCameraModal(true);
+      // Attach stream to video element after modal renders
+      setTimeout(() => {
+        if (cameraVideoRef.current) {
+          cameraVideoRef.current.srcObject = stream;
+        }
+      }, 100);
     } catch (err) {
       console.error("Camera error:", err);
       if (err.name === "NotAllowedError") {
         showError("Camera permission is required. Please allow camera access.");
+      } else if (err.name === "NotFoundError") {
+        showError("No camera found on this device.");
       } else {
         // Fallback to file picker
         cameraInputRef.current?.click();
       }
     }
+  }
+
+  function closeCamera() {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+      cameraStreamRef.current = null;
+    }
+    if (cameraVideoRef.current) {
+      cameraVideoRef.current.srcObject = null;
+    }
+    setIsRecordingVideo(false);
+    setShowCameraModal(false);
+  }
+
+  function capturePhoto() {
+    const video = cameraVideoRef.current;
+    if (!video) return;
+    const canvas = cameraCanvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
+          const url = URL.createObjectURL(blob);
+          setMediaPreview(url);
+          setMediaPreviewFile(file);
+          closeCamera();
+        }
+      },
+      "image/jpeg",
+      0.9
+    );
+  }
+
+  function toggleVideoRecording() {
+    if (isRecordingVideo) {
+      // Stop recording
+      if (mediaRecorderRef2.current && mediaRecorderRef2.current.state !== "inactive") {
+        mediaRecorderRef2.current.stop();
+      }
+      setIsRecordingVideo(false);
+      return;
+    }
+    // Start recording
+    const stream = cameraStreamRef.current;
+    if (!stream) return;
+    mediaRecorderChunksRef.current = [];
+    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    mediaRecorderRef2.current = recorder;
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) mediaRecorderChunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(mediaRecorderChunksRef.current, { type: "video/webm" });
+      const file = new File([blob], `video-${Date.now()}.webm`, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      setMediaPreview(url);
+      setMediaPreviewFile(file);
+      closeCamera();
+    };
+    recorder.start();
+    setIsRecordingVideo(true);
   }
 
   function handleCameraCapture(event) {
@@ -6786,6 +6840,57 @@ function renderLogin() {
           >
             ×
           </button>
+        </div>
+      )}
+
+      {/* ─── Camera Modal ─── */}
+      {showCameraModal && (
+        <div className="camera-modal-overlay" onClick={closeCamera}>
+          <div className="camera-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="camera-modal-header">
+              <button className="camera-modal-close" onClick={closeCamera}>×</button>
+              <div className="camera-mode-toggle">
+                <button
+                  className={`camera-mode-btn ${cameraMode === "photo" ? "active" : ""}`}
+                  onClick={() => { setCameraMode("photo"); if (isRecordingVideo) toggleVideoRecording(); }}
+                >
+                  Photo
+                </button>
+                <button
+                  className={`camera-mode-btn ${cameraMode === "video" ? "active" : ""}`}
+                  onClick={() => setCameraMode("video")}
+                >
+                  Video
+                </button>
+              </div>
+            </div>
+
+            <div className="camera-modal-body">
+              <video
+                ref={cameraVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="camera-preview-video"
+              />
+              <canvas ref={cameraCanvasRef} style={{ display: "none" }} />
+            </div>
+
+            <div className="camera-modal-footer">
+              {cameraMode === "photo" ? (
+                <button className="camera-capture-btn" onClick={capturePhoto}>
+                  <div className="camera-capture-ring" />
+                </button>
+              ) : (
+                <button
+                  className={`camera-capture-btn ${isRecordingVideo ? "recording" : ""}`}
+                  onClick={toggleVideoRecording}
+                >
+                  <div className={`camera-capture-ring ${isRecordingVideo ? "recording" : ""}`} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
