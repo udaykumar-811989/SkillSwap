@@ -943,81 +943,6 @@ export default function App() {
 
   const DEMO_PASSWORD = "SkillSwapDemo2024!";
 
-  async function switchActiveUser(userObj) {
-    try {
-      setLoading(true);
-      setActiveChatUser(null);
-      setChatMessages([]);
-      setDbConversations([]);
-      setActiveConversationId(null);
-      cleanupCall();
-
-      // Try to sign in with Supabase auth
-      let { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: userObj.email,
-        password: DEMO_PASSWORD,
-      });
-
-      // If user doesn't exist, create them
-      if (signInError) {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: userObj.email,
-          password: DEMO_PASSWORD,
-          options: {
-            data: {
-              full_name: userObj.name,
-              username: userObj.username,
-            },
-          },
-        });
-
-        if (signUpError) {
-          console.warn("Sign up error:", signUpError.message);
-          // Fall back to mock session if sign up fails
-          setSession({ user: { id: userObj.id, email: userObj.email } });
-          await loadUserData(userObj.id);
-          showMessage(`Switched to ${userObj.name} (demo mode - limited functionality)`);
-          return;
-        }
-
-        data = signUpData;
-
-        // Create profile for the new user
-        if (data?.user?.id) {
-          await supabase.from("profiles").upsert({
-            id: data.user.id,
-            full_name: userObj.name,
-            name: userObj.name,
-            username: userObj.username,
-            email: userObj.email,
-            bio: "Demo user on SkillSwap",
-            skills_teach: JSON.stringify(["Python", "JavaScript"]),
-            skills_learn: JSON.stringify(["React", "DSA"]),
-            teach_skills: ["Python", "JavaScript"],
-            learn_skills: ["React", "DSA"],
-          }, { onConflict: "id" });
-        }
-      }
-
-      if (data?.session) {
-        setSession(data.session);
-        await loadUserData(data.session.user.id);
-        showMessage(`Switched to ${userObj.name}`);
-      } else {
-        // Use mock session as absolute fallback
-        setSession({ user: { id: userObj.id, email: userObj.email } });
-        await loadUserData(userObj.id);
-        showMessage(`Switched to ${userObj.name} (demo mode)`);
-      }
-    } catch (err) {
-      console.error("Switch user error:", err);
-      setSession({ user: { id: userObj.id, email: userObj.email } });
-      await loadUserData(userObj.id);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   /* =========================
      LOGIN
   ========================= */
@@ -5588,9 +5513,7 @@ function renderLogin() {
     return renderLogin();
   }
 
-  const currentActiveUser = DEMO_USERS.find((u) => u.id === session?.user?.id) || {
-    name: getName(profile),
-  };
+
 
   return (
     <div
@@ -5713,7 +5636,7 @@ function renderLogin() {
               <div className="account-dropdown">
                 <div className="account-dropdown-user">
                   <strong>{getName(profile)}</strong>
-                  <small>{session?.user?.email || currentActiveUser?.email || ""}</small>
+                  <small>{session?.user?.email || ""}</small>
                 </div>
 
                 <div className="account-dropdown-divider" />
@@ -5739,21 +5662,6 @@ function renderLogin() {
                 >
                   🏆 Skill Points: <strong>{skillPointsLocal}</strong>
                 </button>
-
-                <div className="account-dropdown-divider" />
-
-                {DEMO_USERS.filter(u => u.id !== session?.user?.id).map(u => (
-                  <button
-                    key={u.id}
-                    className="account-dropdown-item"
-                    onClick={() => {
-                      setShowAccountMenu(false);
-                      switchActiveUser(u);
-                    }}
-                  >
-                    🔄 Switch to {u.name}
-                  </button>
-                ))}
 
                 <div className="account-dropdown-divider" />
 
