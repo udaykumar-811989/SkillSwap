@@ -1559,7 +1559,6 @@ export default function App() {
     if (!partner || !session?.user?.id) return;
     const myId = session.user.id;
 
-    // Remove from UI immediately
     setChatMessages((prev) => prev.filter((m) => {
       const isWithPartner = (m.sender_id === myId && m.receiver_id === partner.id) ||
         (m.sender_id === partner.id && m.receiver_id === myId);
@@ -1574,24 +1573,32 @@ export default function App() {
     closeConvMenu();
 
     try {
-      // Fetch all messages in this conversation
       const { data: msgs } = await supabase
         .from("messages")
-        .select("id, hidden_for")
+        .select("id, hidden_by")
         .or(`and(sender_id.eq.${myId},receiver_id.eq.${partner.id}),and(sender_id.eq.${partner.id},receiver_id.eq.${myId})`);
 
       if (msgs && msgs.length > 0) {
         for (const m of msgs) {
-          let arr = m.hidden_for || [];
-          if (!Array.isArray(arr)) arr = [];
-          if (!arr.includes(myId)) {
-            arr.push(myId);
+          let val = m.hidden_by || "";
+          if (!val.includes(myId)) {
+            val = val ? val + "," + myId : myId;
             await supabase
               .from("messages")
-              .update({ hidden_for: arr })
+              .update({ hidden_by: val })
               .eq("id", m.id)
               .catch(() => {});
           }
+        }
+      }
+
+      showMessage("Conversation cleared");
+      setTimeout(() => showMessage(""), 2000);
+      loadConversations(myId);
+    } catch (err) {
+      console.error("Clear conversation error:", err);
+    }
+  }
         }
       }
 
@@ -1624,29 +1631,28 @@ export default function App() {
     const myId = session?.user?.id;
     if (!myId) return;
 
-    // Remove from UI immediately
     setChatMessages((prev) => prev.filter((m) => m.id !== msg.id));
     setRecentMessages((prev) => prev.filter((m) => m.id !== msg.id));
     closeMessageMenu();
 
     try {
-      // Add my ID to hidden_for so DB never returns this message to me again
       const { data: current } = await supabase
         .from("messages")
-        .select("hidden_for")
+        .select("hidden_by")
         .eq("id", msg.id)
         .maybeSingle();
 
-      let arr = current?.hidden_for;
-      if (!Array.isArray(arr)) arr = [];
-      if (!arr.includes(myId)) arr.push(myId);
+      let val = current?.hidden_by || "";
+      if (!val.includes(myId)) {
+        val = val ? val + "," + myId : myId;
+      }
 
       const { error } = await supabase
         .from("messages")
-        .update({ hidden_for: arr })
+        .update({ hidden_by: val })
         .eq("id", msg.id);
 
-      if (error) console.error("deleteForMe update error:", error.message, error.hint);
+      if (error) console.error("deleteForMe error:", error.message, error.hint);
       showMessage("Message deleted");
       setTimeout(() => showMessage(""), 2000);
       if (session?.user?.id) loadConversations(session.user.id);
@@ -1658,19 +1664,17 @@ export default function App() {
   async function unsendMsg(msg) {
     if (!msg.id || String(msg.id).startsWith("temp-")) return;
 
-    // Remove from UI immediately
     setChatMessages((prev) => prev.filter((m) => m.id !== msg.id));
     setRecentMessages((prev) => prev.filter((m) => m.id !== msg.id));
     closeMessageMenu();
 
     try {
-      // Delete the row entirely — gone for everyone
       const { error } = await supabase
         .from("messages")
         .delete()
         .eq("id", msg.id);
 
-      if (error) console.error("unsendMsg delete error:", error.message, error.hint);
+      if (error) console.error("unsendMsg error:", error.message, error.hint);
       showMessage("Message unsent");
       setTimeout(() => showMessage(""), 2000);
       if (session?.user?.id) loadConversations(session.user.id);
@@ -2829,7 +2833,7 @@ export default function App() {
           if (!newMsg) return;
 
           // If message was hidden for current user, don't show it
-          if (newMsg.hidden_for && newMsg.hidden_for.includes(myId)) return;
+          if (newMsg.hidden_by && newMsg.hidden_by.includes(myId)) return;
 
           // If message belongs to currently open chat
           if (
@@ -2863,7 +2867,7 @@ export default function App() {
           if (!updatedMsg) return;
 
           // If message was hidden for current user, remove from chat
-          if (updatedMsg.hidden_for && updatedMsg.hidden_for.includes(myId)) {
+          if (updatedMsg.hidden_by && updatedMsg.hidden_by.includes(myId)) {
             setChatMessages((prev) => prev.filter((m) => m.id !== updatedMsg.id));
             return;
           }
