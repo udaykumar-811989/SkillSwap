@@ -69,7 +69,8 @@ CREATE POLICY "Participants can update messages"
   ON public.messages FOR UPDATE
   USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
--- DELETE: Sender can delete their own messages
-CREATE POLICY "Sender can delete their messages"
+-- DELETE: Both sender and receiver can delete messages
+DROP POLICY IF EXISTS "Sender can delete their messages" ON public.messages;
+CREATE POLICY "Participants can delete messages"
   ON public.messages FOR DELETE
-  USING (auth.uid() = sender_id);
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
