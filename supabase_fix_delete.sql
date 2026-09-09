@@ -41,19 +41,23 @@ BEGIN
   END IF;
 END $$;
 
--- 2. Reset all RLS policies on messages and recreate them properly
+-- 2. Reset ALL RLS policies on messages
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Participants can view messages" ON public.messages;
 DROP POLICY IF EXISTS "Authenticated users can insert messages" ON public.messages;
 DROP POLICY IF EXISTS "Participants can update message status" ON public.messages;
+DROP POLICY IF EXISTS "Participants can update messages" ON public.messages;
 DROP POLICY IF EXISTS "Sender can delete their messages" ON public.messages;
 DROP POLICY IF EXISTS "Allow all for authenticated" ON public.messages;
 
--- SELECT: Users can see messages they sent/received (hidden_for filtering done in app)
+-- SELECT: Users can see messages they sent/received, EXCLUDING hidden ones
 CREATE POLICY "Participants can view messages"
   ON public.messages FOR SELECT
-  USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+  USING (
+    (auth.uid() = sender_id OR auth.uid() = receiver_id)
+    AND NOT (hidden_for ? auth.uid()::text)
+  );
 
 -- INSERT: Users can only insert messages as themselves
 CREATE POLICY "Authenticated users can insert messages"

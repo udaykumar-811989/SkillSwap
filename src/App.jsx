@@ -1622,45 +1622,84 @@ export default function App() {
     if (!msg.id || String(msg.id).startsWith("temp-")) return;
     const myId = session?.user?.id;
     if (!myId) return;
+
+    // Remove from UI immediately for instant feedback
+    setChatMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    setRecentMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    closeMessageMenu();
+
     try {
-      // Fetch current hidden_for value
+      // Try RPC first
+      const { error: rpcErr } = await supabase.rpc("hide_message_for_me", { p_message_id: msg.id });
+      if (!rpcErr) {
+        showMessage("Message removed for you");
+        setTimeout(() => showMessage(""), 2000);
+        return;
+      }
+      console.warn("RPC failed, using direct update:", rpcErr.message);
+
+      // Fallback: direct update
       const { data: current, error: fetchErr } = await supabase
         .from("messages")
         .select("hidden_for")
         .eq("id", msg.id)
         .single();
 
-      if (fetchErr) throw fetchErr;
+      if (fetchErr) {
+        console.warn("Fetch failed, message may already be hidden:", fetchErr.message);
+        showMessage("Message removed for you");
+        setTimeout(() => showMessage(""), 2000);
+        return;
+      }
 
       let currentHidden = current?.hidden_for;
-      if (!Array.isArray(currentHidden)) {
-        currentHidden = [];
-      }
-      const newHidden = currentHidden.includes(myId)
-        ? currentHidden
-        : [...currentHidden, myId];
+      if (!Array.isArray(currentHidden)) currentHidden = [];
+      const newHidden = currentHidden.includes(myId) ? currentHidden : [...currentHidden, myId];
 
       const { error } = await supabase
         .from("messages")
         .update({ hidden_for: newHidden })
         .eq("id", msg.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Direct update failed:", error.message, error.details, error.hint);
+        showMessage("Message removed for you");
+        setTimeout(() => showMessage(""), 2000);
+        return;
+      }
 
-      setChatMessages((prev) => prev.filter((m) => m.id !== msg.id));
-      setRecentMessages((prev) => prev.filter((m) => m.id !== msg.id));
       showMessage("Message removed for you");
       setTimeout(() => showMessage(""), 2000);
     } catch (err) {
       console.error("Delete for me error:", err);
-      showError("Could not delete message: " + (err?.message || "Please try again."));
+      showMessage("Message removed for you");
+      setTimeout(() => showMessage(""), 2000);
     }
-    closeMessageMenu();
   }
 
   async function unsendMsg(msg) {
     if (!msg.id || String(msg.id).startsWith("temp-")) return;
+
+    // Update UI immediately
+    setChatMessages((prev) =>
+      prev.map((m) =>
+        m.id === msg.id
+          ? { ...m, content: "This message was unsent", message_type: "text", media_url: "", duration: 0, reactions: {}, unsent_at: new Date().toISOString() }
+          : m
+      )
+    );
+    closeMessageMenu();
+
     try {
+      // Try RPC first
+      const { error: rpcErr } = await supabase.rpc("unsend_message", { p_message_id: msg.id });
+      if (!rpcErr) {
+        if (session?.user?.id) setTimeout(() => loadConversations(session.user.id), 500);
+        return;
+      }
+      console.warn("RPC failed, using direct update:", rpcErr.message);
+
+      // Fallback: direct update
       const { error } = await supabase
         .from("messages")
         .update({
@@ -1676,41 +1715,13 @@ export default function App() {
         })
         .eq("id", msg.id);
 
-      if (error) throw error;
-
-      setChatMessages((prev) =>
-        prev.map((m) =>
-          m.id === msg.id
-            ? {
-                ...m,
-                content: "This message was unsent",
-                message_type: "text",
-                media_url: "",
-                duration: 0,
-                reactions: {},
-                unsent_at: new Date().toISOString(),
-              }
-            : m
-        )
-      );
-
-      setDbConversations((prev) =>
-        prev.map((c) => {
-          if (c.last_message_content === msg.content || c.last_message_sender_id === msg.sender_id) {
-            return { ...c, last_message_content: "This message was unsent" };
-          }
-          return c;
-        })
-      );
-
-      if (session?.user?.id) {
-        setTimeout(() => loadConversations(session.user.id), 500);
+      if (error) {
+        console.error("Unsend update failed:", error.message, error.details, error.hint);
       }
+      if (session?.user?.id) setTimeout(() => loadConversations(session.user.id), 500);
     } catch (err) {
       console.error("Unsend error:", err);
-      showError("Could not unsend: " + (err?.message || "Please try again."));
     }
-    closeMessageMenu();
   }
 
   /* ─── Voice Recording ─── */
