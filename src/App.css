@@ -2914,8 +2914,8 @@ footer {
     margin-left: 4px;
   }
   .call-btn {
-    width: 34px;
-    height: 34px;
+    width: 38px;
+    height: 38px;
     font-size: 14px;
   }
   .local-video {
@@ -2925,14 +2925,30 @@ footer {
     right: 12px;
   }
   .call-controls {
-    padding: 12px 20px;
-    gap: 12px;
-    bottom: 24px;
+    padding: 16px 20px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 16px);
+    gap: 16px;
+    bottom: 0;
+    position: fixed;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
   }
   .call-control-btn {
-    width: 46px;
-    height: 46px;
-    font-size: 18px;
+    width: 52px;
+    height: 52px;
+    font-size: 20px;
+  }
+  .incoming-call-card {
+    padding: 32px 24px;
+    max-width: 300px;
+    width: 85%;
+  }
+  .incoming-call-avatar {
+    width: 80px;
+    height: 80px;
+    font-size: 32px;
   }
 }
 
@@ -5068,6 +5084,11 @@ footer {
   to { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
 }
 
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
 .msg-menu-item {
   display: flex;
   align-items: center;
@@ -6059,13 +6080,6 @@ footer {
     padding: 16px 12px 100px;
   }
 
-  .inside-page.chat-view-page {
-    padding: 0;
-    height: calc(100vh - 56px);
-    height: calc(100dvh - 56px);
-    overflow: hidden;
-  }
-
   .inside-header h1 {
     font-size: 22px;
   }
@@ -6242,9 +6256,28 @@ footer {
 
   /* --- Message context menu mobile --- */
   .msg-action-menu {
-    left: 50% !important;
-    right: auto !important;
-    max-width: calc(100vw - 32px);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    max-width: 100%;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    padding: 8px 8px calc(env(safe-area-inset-bottom, 8px) + 8px);
+    animation: sheetSlideUp 0.2s ease;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .msg-menu-overlay {
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .msg-menu-item {
+    padding: 14px 16px;
+    font-size: 15px;
+    border-radius: 12px;
   }
 
   /* --- Voice message mobile --- */
@@ -6264,12 +6297,6 @@ footer {
 
   .voice-recording-bar {
     gap: 8px;
-  }
-
-  /* --- Chat input mobile --- */
-  .chat-input-area {
-    padding: 8px 10px;
-    gap: 6px;
   }
 
   /* --- Instagram Composer Mobile --- */
@@ -6485,10 +6512,27 @@ footer {
   }
 
   /* --- Modal --- */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
   .modal-card {
-    margin: 10px;
+    margin: 0;
     max-height: 90vh;
-    border-radius: 16px;
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    animation: sheetSlideUp 0.25s ease;
+  }
+
+  .modal-close {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .modal-header {
+    padding: 16px 20px 0;
   }
 
   .modal-body .form-row {
@@ -6808,8 +6852,10 @@ footer {
 
   .connect-button,
   .primary-button,
-  .secondary-button {
+  .secondary-button,
+  .danger-button {
     min-height: 44px;
+    min-width: 44px;
   }
 
   .inbox-item {
@@ -6818,6 +6864,36 @@ footer {
 
   .navigation button {
     min-height: 36px;
+  }
+
+  .call-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .call-control-btn {
+    min-width: 48px;
+    min-height: 48px;
+  }
+
+  .modal-close {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .msg-more-btn {
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  .voice-play-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .chat-send-btn {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 
@@ -6851,7 +6927,7 @@ footer {
   right: 0;
   background: rgba(255, 255, 255, 0.97);
   backdrop-filter: blur(12px);
-  border-top: 1px solid #eeeef;
+  border-top: 1px solid #eeeeef;
   z-index: 1000;
   padding: 6px 0 4px;
   justify-content: space-around;
@@ -6985,7 +7061,7 @@ footer {
 .camera-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 10001;
   background: rgba(0, 0, 0, 0.95);
   display: flex;
   align-items: center;
@@ -6996,7 +7072,9 @@ footer {
   width: 100%;
   max-width: 480px;
   height: 100vh;
+  height: 100dvh;
   max-height: 100vh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: #000;
@@ -7121,5 +7199,108 @@ footer {
 @media (max-width: 480px) {
   .camera-modal {
     max-width: 100%;
+  }
+}
+
+/* ============================
+   MOBILE KEYBOARD HANDLING
+   ============================ */
+
+@supports (height: 100dvh) {
+  @media (max-width: 768px) {
+    .inside-page.chat-view-page {
+      height: 100dvh;
+      height: calc(var(--vh, 100vh) * 100);
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .chat-container-layout {
+      height: 100%;
+    }
+
+    .chat-input-area {
+      padding-bottom: env(safe-area-inset-bottom, 8px);
+    }
+
+    .mobile-bottom-nav {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+  }
+}
+
+/* Chat messages scroll to bottom on new message */
+@supports (scroll-padding-bottom: 0) {
+  .real-chat-messages {
+    scroll-padding-bottom: 20px;
+  }
+}
+
+/* Prevent iOS rubber-band overscroll on chat */
+@supports (-webkit-overflow-scrolling: touch) {
+  @media (max-width: 768px) {
+    .real-chat-messages {
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+}
+
+/* ============================
+   MOBILE FORM IMPROVEMENTS
+   ============================ */
+
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="number"],
+  textarea {
+    max-width: 100%;
+  }
+
+  .form-group textarea {
+    min-height: 80px;
+  }
+
+  .modal-card {
+    max-height: 85vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modal-overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+}
+
+/* ============================
+   MOBILE ACCESSIBILITY
+   ============================ */
+
+@media (max-width: 768px) {
+  .person-card, .inbox-item, .session-card, .reward-card {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .person-card:active, .inbox-item:active, .session-card:active, .reward-card:active {
+    opacity: 0.85;
+    transform: scale(0.98);
+  }
+
+  a, button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .primary-button:active, .secondary-button:active, .danger-button:active {
+    transform: scale(0.97);
   }
 }

@@ -52,17 +52,25 @@ input,
 textarea,
 select {
   font: inherit;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 button {
   cursor: pointer;
   border: none;
   background: transparent;
+  touch-action: manipulation;
 }
 
 button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+input, textarea {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 img {
@@ -72,4 +80,5 @@ img {
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
 }
