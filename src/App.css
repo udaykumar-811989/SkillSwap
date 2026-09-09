@@ -2756,6 +2756,7 @@ footer {
   flex-direction: column;
   background: #0e0b1a;
   color: white;
+  position: relative;
 }
 
 .active-call-overlay.voice {
@@ -2939,28 +2940,115 @@ footer {
     height: 38px;
     font-size: 14px;
   }
-  .local-video {
-    width: 100px;
-    height: 130px;
-    top: 12px;
-    right: 12px;
+
+  /* Video call - full screen */
+  .video-call-container {
+    position: absolute;
+    inset: 0;
+    background: #000;
   }
+
+  .remote-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Local video - small floating PiP */
+  .local-video {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 110px;
+    height: 150px;
+    border-radius: 14px;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.4);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+    z-index: 10;
+  }
+
+  /* Voice call - centered avatar */
+  .voice-call-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    padding: 20px;
+  }
+
+  .voice-call-avatar {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    font-size: 56px;
+    margin-bottom: 24px;
+  }
+
+  .call-status-name {
+    font-size: 26px;
+    font-weight: 800;
+  }
+
+  .call-status-text {
+    font-size: 15px;
+    opacity: 0.8;
+  }
+
+  /* Call status bar - top center */
+  .call-status-bar {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    z-index: 20;
+    white-space: nowrap;
+  }
+
+  /* Call controls - bottom center floating bar */
   .call-controls {
-    padding: 16px 20px;
-    padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 16px);
-    gap: 16px;
-    bottom: 0;
     position: fixed;
+    bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 20px 24px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 20px);
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(12px);
+    border-radius: 0;
+    z-index: 20;
   }
+
   .call-control-btn {
-    width: 52px;
-    height: 52px;
-    font-size: 20px;
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(4px);
   }
+
+  .call-control-btn.active {
+    background: rgba(255,255,255,0.3);
+  }
+
+  .end-call-btn {
+    width: 64px;
+    height: 64px;
+    font-size: 28px;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+  }
+
   .incoming-call-card {
     padding: 32px 24px;
     max-width: 300px;
