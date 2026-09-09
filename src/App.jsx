@@ -6663,6 +6663,7 @@ function renderLogin() {
         </div>
       )}
 
+      {!activeChatUser && (
       <header className="navbar">
         <div className="nav-content">
           <button
@@ -6809,6 +6810,7 @@ function renderLogin() {
           </div>
         </div>
       </header>
+      )}
 
       {message && (
         <div className="notice">

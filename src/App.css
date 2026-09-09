@@ -5005,6 +5005,7 @@ footer {
   background: #f4efff;
   border-top: 1px solid #e8dbfc;
   border-bottom: 1px solid #eeeef0;
+  flex-shrink: 0;
 }
 
 .reply-bar-content {
@@ -5477,6 +5478,7 @@ footer {
   padding: 6px 8px;
   border-top: 1px solid #f0f0f0;
   background: white;
+  flex-shrink: 0;
 }
 
 .ig-composer-btn {
@@ -5537,6 +5539,7 @@ footer {
   padding: 8px 10px;
   border-top: 1px solid #f0f0f0;
   background: white;
+  flex-shrink: 0;
 }
 
 .ig-rec-cancel {
@@ -5632,6 +5635,7 @@ footer {
   padding: 8px 12px;
   border-top: 1px solid #f0f0f0;
   background: white;
+  flex-shrink: 0;
 }
 
 .media-preview-img {
