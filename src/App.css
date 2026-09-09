@@ -1154,6 +1154,22 @@ main {
   box-shadow: 0 1px 4px rgba(40, 25, 70, 0.04);
 }
 
+.message-bubble video {
+  max-width: 240px;
+  max-height: 320px;
+  width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+.message-bubble img {
+  max-width: 240px;
+  max-height: 320px;
+  width: auto;
+  border-radius: 8px;
+  display: block;
+}
+
 .message-row.mine .message-bubble {
   border: 0;
   border-radius: 14px 14px 4px 14px;
@@ -5148,14 +5164,14 @@ footer {
 
 .msg-more-btn {
   position: absolute;
-  top: 4px;
-  right: -4px;
+  top: 2px;
+  right: -32px;
   background: rgba(255, 255, 255, 0.9);
   border: none;
   border-radius: 50%;
   width: 24px;
   height: 24px;
-  font-size: 14px;
+  font-size: 12px;
   color: #999;
   cursor: pointer;
   display: flex;
@@ -5179,15 +5195,20 @@ footer {
 
 .mine .msg-more-btn {
   right: auto;
-  left: -4px;
+  left: -32px;
 }
 
 @media (max-width: 768px) {
   .msg-more-btn {
-    opacity: 0.6;
-    width: 28px;
-    height: 28px;
-    font-size: 16px;
+    opacity: 0.7;
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+    right: -30px;
+  }
+  .mine .msg-more-btn {
+    right: auto;
+    left: -30px;
   }
 }
 

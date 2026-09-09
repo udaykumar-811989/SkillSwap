@@ -2674,6 +2674,55 @@ export default function App() {
     setIsSpeakerOn((prev) => !prev);
   }
 
+  async function toggleScreenShare() {
+    try {
+      if (callState.isScreenSharing) {
+        // Stop screen sharing - replace with camera track
+        const screenTrack = localStreamRef.current?.getVideoTracks().find(t => t.label.includes("screen") || t.label.includes("display"));
+        if (screenTrack) {
+          screenTrack.stop();
+          localStreamRef.current.removeTrack(screenTrack);
+        }
+        // Re-enable camera
+        const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const camTrack = camStream.getVideoTracks()[0];
+        if (camTrack && localStreamRef.current) {
+          localStreamRef.current.addTrack(camTrack);
+        }
+        setCallState(prev => ({ ...prev, isScreenSharing: false }));
+      } else {
+        // Start screen sharing
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenTrack = screenStream.getVideoTracks()[0];
+        screenTrack.onended = () => {
+          // User stopped sharing via browser UI
+          toggleScreenShare();
+        };
+        // Replace camera track with screen track
+        const oldVideoTrack = localStreamRef.current?.getVideoTracks()[0];
+        if (oldVideoTrack) {
+          oldVideoTrack.stop();
+          localStreamRef.current.removeTrack(oldVideoTrack);
+        }
+        if (localStreamRef.current) {
+          localStreamRef.current.addTrack(screenTrack);
+        }
+        // Update remote peer with new track
+        if (peerConnectionRef.current) {
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
+          if (sender) {
+            await sender.replaceTrack(screenTrack);
+          }
+        }
+        setCallState(prev => ({ ...prev, isScreenSharing: true }));
+      }
+    } catch (err) {
+      console.error("Screen share error:", err);
+      setCallError("Screen share not available or denied");
+      setTimeout(() => setCallError(""), 3000);
+    }
+  }
+
   function formatCallDuration(seconds) {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -4748,7 +4797,6 @@ export default function App() {
                                 <video
                                   src={mediaUrl}
                                   controls
-                                  style={{ maxWidth: "240px", borderRadius: "8px", display: "block", marginBottom: "4px" }}
                                 />
                               ) : (
                                 msg.content
@@ -6992,6 +7040,13 @@ function renderLogin() {
                   title={isCameraOn ? "Camera Off" : "Camera On"}
                 >
                   {isCameraOn ? "📹" : "📷"}
+                </button>
+                <button
+                  className={`call-control-btn ${callState.isScreenSharing ? "active" : ""}`}
+                  onClick={toggleScreenShare}
+                  title={callState.isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                >
+                  {callState.isScreenSharing ? "🖥️" : "💻"}
                 </button>
                 <button
                   className={`call-control-btn ${isSpeakerOn ? "active" : ""}`}
