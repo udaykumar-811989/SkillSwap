@@ -41,17 +41,18 @@ BEGIN
   END IF;
 END $$;
 
--- 2. Reset ALL RLS policies on messages
+-- 2. Reset ALL RLS policies
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Participants can view messages" ON public.messages;
 DROP POLICY IF EXISTS "Authenticated users can insert messages" ON public.messages;
-DROP POLICY IF EXISTS "Participants can update message status" ON public.messages;
 DROP POLICY IF EXISTS "Participants can update messages" ON public.messages;
+DROP POLICY IF EXISTS "Participants can delete messages" ON public.messages;
 DROP POLICY IF EXISTS "Sender can delete their messages" ON public.messages;
 DROP POLICY IF EXISTS "Allow all for authenticated" ON public.messages;
+DROP POLICY IF EXISTS "Participants can update message status" ON public.messages;
 
--- SELECT: Users can see messages they sent/received, EXCLUDING hidden ones
+-- SELECT: Users see messages they sent/received, EXCLUDING hidden ones
 CREATE POLICY "Participants can view messages"
   ON public.messages FOR SELECT
   USING (
@@ -59,18 +60,17 @@ CREATE POLICY "Participants can view messages"
     AND NOT (hidden_for ? auth.uid()::text)
   );
 
--- INSERT: Users can only insert messages as themselves
+-- INSERT: Users can only insert as themselves
 CREATE POLICY "Authenticated users can insert messages"
   ON public.messages FOR INSERT
   WITH CHECK (auth.uid() = sender_id);
 
--- UPDATE: Participants can update messages (for hidden_for, unsent_at, reactions, status)
+-- UPDATE: Participants can update (for hidden_for, reactions, status, unsent)
 CREATE POLICY "Participants can update messages"
   ON public.messages FOR UPDATE
   USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
--- DELETE: Both sender and receiver can delete messages
-DROP POLICY IF EXISTS "Sender can delete their messages" ON public.messages;
+-- DELETE: Both participants can delete (for unsend)
 CREATE POLICY "Participants can delete messages"
   ON public.messages FOR DELETE
   USING (auth.uid() = sender_id OR auth.uid() = receiver_id);

@@ -1574,14 +1574,27 @@ export default function App() {
     closeConvMenu();
 
     try {
-      const { error } = await supabase
+      // Fetch all messages in this conversation
+      const { data: msgs } = await supabase
         .from("messages")
-        .delete()
+        .select("id, hidden_for")
         .or(`and(sender_id.eq.${myId},receiver_id.eq.${partner.id}),and(sender_id.eq.${partner.id},receiver_id.eq.${myId})`);
 
-      if (error) {
-        console.error("Clear conversation error:", error.message, error.details, error.hint);
+      if (msgs && msgs.length > 0) {
+        for (const m of msgs) {
+          let arr = m.hidden_for || [];
+          if (!Array.isArray(arr)) arr = [];
+          if (!arr.includes(myId)) {
+            arr.push(myId);
+            await supabase
+              .from("messages")
+              .update({ hidden_for: arr })
+              .eq("id", m.id)
+              .catch(() => {});
+          }
+        }
       }
+
       showMessage("Conversation cleared");
       setTimeout(() => showMessage(""), 2000);
       loadConversations(myId);
@@ -1608,6 +1621,8 @@ export default function App() {
 
   async function deleteForMe(msg) {
     if (!msg.id || String(msg.id).startsWith("temp-")) return;
+    const myId = session?.user?.id;
+    if (!myId) return;
 
     // Remove from UI immediately
     setChatMessages((prev) => prev.filter((m) => m.id !== msg.id));
@@ -1615,19 +1630,28 @@ export default function App() {
     closeMessageMenu();
 
     try {
+      // Add my ID to hidden_for so DB never returns this message to me again
+      const { data: current } = await supabase
+        .from("messages")
+        .select("hidden_for")
+        .eq("id", msg.id)
+        .maybeSingle();
+
+      let arr = current?.hidden_for;
+      if (!Array.isArray(arr)) arr = [];
+      if (!arr.includes(myId)) arr.push(myId);
+
       const { error } = await supabase
         .from("messages")
-        .delete()
+        .update({ hidden_for: arr })
         .eq("id", msg.id);
 
-      if (error) {
-        console.error("Delete error:", error.message, error.details, error.hint);
-      }
+      if (error) console.error("deleteForMe update error:", error.message, error.hint);
       showMessage("Message deleted");
       setTimeout(() => showMessage(""), 2000);
       if (session?.user?.id) loadConversations(session.user.id);
     } catch (err) {
-      console.error("Delete for me error:", err);
+      console.error("deleteForMe error:", err);
     }
   }
 
@@ -1640,19 +1664,18 @@ export default function App() {
     closeMessageMenu();
 
     try {
+      // Delete the row entirely — gone for everyone
       const { error } = await supabase
         .from("messages")
         .delete()
         .eq("id", msg.id);
 
-      if (error) {
-        console.error("Unsend error:", error.message, error.details, error.hint);
-      }
+      if (error) console.error("unsendMsg delete error:", error.message, error.hint);
       showMessage("Message unsent");
       setTimeout(() => showMessage(""), 2000);
       if (session?.user?.id) loadConversations(session.user.id);
     } catch (err) {
-      console.error("Unsend error:", err);
+      console.error("unsendMsg error:", err);
     }
   }
 
