@@ -1561,14 +1561,21 @@ export default function App() {
     try {
       const { data: msgs, error: fetchErr } = await supabase
         .from("messages")
-        .select("id")
+        .select("id, hidden_for")
         .or(`and(sender_id.eq.${myId},receiver_id.eq.${partner.id}),and(sender_id.eq.${partner.id},receiver_id.eq.${myId})`);
 
       if (fetchErr) throw fetchErr;
 
       if (msgs && msgs.length > 0) {
         for (const msg of msgs) {
-          await supabase.rpc("hide_message_for_me", { p_message_id: msg.id }).catch(() => {});
+          const currentHidden = msg.hidden_for || [];
+          if (!currentHidden.includes(myId)) {
+            await supabase
+              .from("messages")
+              .update({ hidden_for: [...currentHidden, myId] })
+              .eq("id", msg.id)
+              .catch(() => {});
+          }
         }
       }
 
@@ -1576,6 +1583,13 @@ export default function App() {
         const isWithPartner = (m.sender_id === myId && m.receiver_id === partner.id) ||
           (m.sender_id === partner.id && m.receiver_id === myId);
         return !isWithPartner;
+      }));
+
+      setRecentMessages((prev) => prev.filter((m) => {
+        return !(
+          (m.sender_id === myId && m.receiver_id === partner.id) ||
+          (m.sender_id === partner.id && m.receiver_id === myId)
+        );
       }));
 
       showMessage("Conversation cleared");
@@ -1606,13 +1620,39 @@ export default function App() {
 
   async function deleteForMe(msg) {
     if (!msg.id || String(msg.id).startsWith("temp-")) return;
+    const myId = session?.user?.id;
+    if (!myId) return;
     try {
-      const { error } = await supabase.rpc("hide_message_for_me", { p_message_id: msg.id });
+      // Fetch current hidden_for value
+      const { data: current, error: fetchErr } = await supabase
+        .from("messages")
+        .select("hidden_for")
+        .eq("id", msg.id)
+        .single();
+
+      if (fetchErr) throw fetchErr;
+
+      let currentHidden = current?.hidden_for;
+      if (!Array.isArray(currentHidden)) {
+        currentHidden = [];
+      }
+      const newHidden = currentHidden.includes(myId)
+        ? currentHidden
+        : [...currentHidden, myId];
+
+      const { error } = await supabase
+        .from("messages")
+        .update({ hidden_for: newHidden })
+        .eq("id", msg.id);
+
       if (error) throw error;
+
       setChatMessages((prev) => prev.filter((m) => m.id !== msg.id));
-      setMessage("Message removed for you");
-      setTimeout(() => setMessage(""), 2000);
+      setRecentMessages((prev) => prev.filter((m) => m.id !== msg.id));
+      showMessage("Message removed for you");
+      setTimeout(() => showMessage(""), 2000);
     } catch (err) {
+      console.error("Delete for me error:", err);
       showError("Could not delete message: " + (err?.message || "Please try again."));
     }
     closeMessageMenu();
@@ -1621,29 +1661,53 @@ export default function App() {
   async function unsendMsg(msg) {
     if (!msg.id || String(msg.id).startsWith("temp-")) return;
     try {
-      const { error } = await supabase.rpc("unsend_message", { p_message_id: msg.id });
+      const { error } = await supabase
+        .from("messages")
+        .update({
+          content: "This message was unsent",
+          message_type: "text",
+          media_url: "",
+          duration: 0,
+          reactions: {},
+          unsent_at: new Date().toISOString(),
+          reply_to_id: null,
+          reply_to_content: "",
+          reply_to_sender_name: "",
+        })
+        .eq("id", msg.id);
+
       if (error) throw error;
-      setChatMessages((prev) => prev.map((m) => m.id === msg.id ? {
-        ...m,
-        content: "You unsent this message",
-        message_type: "text",
-        media_url: "",
-        duration: 0,
-        reactions: {},
-        unsent_at: new Date().toISOString(),
-      } : m));
-      // Update conversation preview locally
-      setDbConversations((prev) => prev.map((c) => {
-        if (c.id === msg.conversation_id) {
-          return { ...c, last_message_preview: "You unsent this message" };
-        }
-        return c;
-      }));
-      // Also reload from DB to be safe
+
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id
+            ? {
+                ...m,
+                content: "This message was unsent",
+                message_type: "text",
+                media_url: "",
+                duration: 0,
+                reactions: {},
+                unsent_at: new Date().toISOString(),
+              }
+            : m
+        )
+      );
+
+      setDbConversations((prev) =>
+        prev.map((c) => {
+          if (c.last_message_content === msg.content || c.last_message_sender_id === msg.sender_id) {
+            return { ...c, last_message_content: "This message was unsent" };
+          }
+          return c;
+        })
+      );
+
       if (session?.user?.id) {
         setTimeout(() => loadConversations(session.user.id), 500);
       }
     } catch (err) {
+      console.error("Unsend error:", err);
       showError("Could not unsend: " + (err?.message || "Please try again."));
     }
     closeMessageMenu();
