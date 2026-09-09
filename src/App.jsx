@@ -6977,19 +6977,6 @@ function renderLogin() {
             <div className="video-call-container">
               <video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />
               <video ref={localVideoRef} autoPlay playsInline muted className="local-video" />
-              <div className="call-status-bar">
-                <span className={`call-status-dot ${callState.status}`} />
-                <span style={{ fontWeight: 700, marginRight: 6 }}>
-                  {callState.callerId === session?.user?.id
-                    ? getName(findPerson(callState.receiverId) || profile)
-                    : callState.callerName}
-                </span>
-                <span className="call-status-text">
-                  {callState.status === "calling" && "Calling..."}
-                  {callState.status === "accepted" && "Connecting..."}
-                  {callState.status === "connected" && formatCallDuration(callDuration)}
-                </span>
-              </div>
             </div>
           )}
 
