@@ -70,6 +70,7 @@ export default function App() {
   const [convMenuTarget, setConvMenuTarget] = useState(null);
   const [convMenuPos, setConvMenuPos] = useState({ top: 0, left: 0 });
   const convLongPressRef = useRef(null);
+  const convLongPressMovedRef = useRef(false);
 
   /* VOICE RECORDING STATE */
   const [isRecording, setIsRecording] = useState(false);
@@ -214,7 +215,6 @@ export default function App() {
     catch { return { adsCompleted: 0, rewardClaimed: false }; }
   });
 
-  const [showRewardsPage, setShowRewardsPage] = useState(false);
   const [showAdModal, setShowAdModal] = useState(false);
   const [adState, setAdState] = useState("idle"); // idle | playing | completed | skipped
   const [adCountdown, setAdCountdown] = useState(0);
@@ -755,13 +755,15 @@ export default function App() {
   // Mobile viewport height handler (fixes iOS keyboard issues)
   useEffect(() => {
     function setVH() {
-      const vh = window.innerHeight * 0.01;
+      const vh = (window.visualViewport?.height || window.innerHeight) * 0.01;
       document.documentElement.style.setProperty("--vh", `${vh}px`);
     }
     setVH();
+    window.visualViewport?.addEventListener("resize", setVH);
     window.addEventListener("resize", setVH);
     window.addEventListener("orientationchange", () => setTimeout(setVH, 100));
     return () => {
+      window.visualViewport?.removeEventListener("resize", setVH);
       window.removeEventListener("resize", setVH);
       window.removeEventListener("orientationchange", setVH);
     };
@@ -1541,9 +1543,20 @@ export default function App() {
   /* ─── Conversation Context Menu ─── */
 
   function handleConvLongPressStart(e, partner) {
+    convLongPressMovedRef.current = false;
     convLongPressRef.current = setTimeout(() => {
-      showConvContextMenu(partner, e);
+      if (!convLongPressMovedRef.current) {
+        showConvContextMenu(partner, e);
+      }
     }, 500);
+  }
+
+  function handleConvLongPressMove() {
+    convLongPressMovedRef.current = true;
+    if (convLongPressRef.current) {
+      clearTimeout(convLongPressRef.current);
+      convLongPressRef.current = null;
+    }
   }
 
   function handleConvLongPressEnd() {
@@ -4482,6 +4495,7 @@ export default function App() {
                         showConvContextMenu(partner, e);
                       }}
                       onPointerDown={(e) => handleConvLongPressStart(e, partner)}
+                      onPointerMove={handleConvLongPressMove}
                       onPointerUp={handleConvLongPressEnd}
                       onPointerLeave={handleConvLongPressEnd}
                     >
@@ -4840,11 +4854,11 @@ export default function App() {
                     <div
                       className="msg-action-menu"
                       onClick={(e) => e.stopPropagation()}
-                      style={{
+                      style={window.innerWidth > 768 ? {
                         top: menuPosition.top,
                         left: menuPosition.left,
                         transform: "translateX(-50%)",
-                      }}
+                      } : {}}
                     >
                       <button className="msg-menu-item" onClick={() => { startReply(selectedMessage); closeMessageMenu(); }}>
                         <span className="msg-menu-icon">↩</span> Reply
@@ -4998,7 +5012,7 @@ export default function App() {
                       }}
                       placeholder="Message..."
                       disabled={sendingMessage}
-                      autoFocus
+                      autoFocus={window.innerWidth > 768}
                     />
 
                     {/* Right side: mic or send */}
@@ -6827,6 +6841,7 @@ function renderLogin() {
       </main>
 
       {/* ─── Mobile Bottom Navigation ─── */}
+      {!activeChatUser && (
       <nav className="mobile-bottom-nav">
         <button
           className={page === "discover" && !viewingProfile ? "mbn-active" : ""}
@@ -6837,7 +6852,7 @@ function renderLogin() {
         </button>
         <button
           className={page === "chat" && !viewingProfile ? "mbn-active" : ""}
-          onClick={() => { setViewingProfile(null); setPage("chat"); }}
+          onClick={() => { setViewingProfile(null); setActiveChatUser(null); setPage("chat"); }}
         >
           <span className="mbn-icon">
             💬
@@ -6870,6 +6885,7 @@ function renderLogin() {
           <span className="mbn-label">Profile</span>
         </button>
       </nav>
+      )}
 
       {/* ─── Incoming Call Overlay ─── */}
       {incomingCall && (
@@ -7101,7 +7117,7 @@ function renderLogin() {
             <p className="earn-modal-balance">🪙 Current balance: {skillPointsLocal}</p>
             <div className="earn-modal-actions">
               <button className="secondary-button" onClick={() => setShowEarnModal(false)}>Cancel</button>
-              <button className="primary-button" onClick={() => { setShowEarnModal(false); resetAdProgress(); setShowRewardsPage(true); setPage("rewards"); }}>
+              <button className="primary-button" onClick={() => { setShowEarnModal(false); resetAdProgress(); setPage("rewards"); }}>
                 🎁 Earn Points
               </button>
             </div>
