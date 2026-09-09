@@ -1599,16 +1599,6 @@ export default function App() {
       console.error("Clear conversation error:", err);
     }
   }
-        }
-      }
-
-      showMessage("Conversation cleared");
-      setTimeout(() => showMessage(""), 2000);
-      loadConversations(myId);
-    } catch (err) {
-      console.error("Clear conversation error:", err);
-    }
-  }
 
   async function copyMessage(msg) {
     const text = msg.content?.startsWith("[image:") ? "[Image]"
