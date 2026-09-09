@@ -4923,7 +4923,9 @@ footer {
   display: flex;
   flex-direction: column;
   max-width: min(70%, 500px);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
+  position: relative;
 }
 
 .reply-preview {
@@ -5115,6 +5117,51 @@ footer {
   height: 1px;
   background: #f0f0f0;
   margin: 4px 8px;
+}
+
+.msg-more-btn {
+  position: absolute;
+  top: 4px;
+  right: -4px;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+  z-index: 5;
+  padding: 0;
+  line-height: 1;
+}
+
+.message-row:hover .msg-more-btn,
+.message-row .msg-more-btn:focus {
+  opacity: 1;
+}
+
+.message-row .msg-more-btn:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.mine .msg-more-btn {
+  right: auto;
+  left: -4px;
+}
+
+@media (max-width: 768px) {
+  .msg-more-btn {
+    opacity: 0.6;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
 }
 
 /* ============================
@@ -5663,6 +5710,12 @@ footer {
 
 .profile-btn:hover {
   background: #f5f3fa !important;
+}
+
+.profile-btn:active,
+.connect-button:active {
+  transform: scale(0.97);
+  opacity: 0.85;
 }
 
 .clickable-avatar {

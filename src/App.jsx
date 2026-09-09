@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
+import {
+  registerDeviceToken,
+  listenForForegroundMessages,
+  stopListeningForMessages,
+  sendPushNotification,
+} from "./lib/notifications";
 import "./App.css";
 
 
@@ -59,6 +65,12 @@ export default function App() {
   const longPressTimerRef = useRef(null);
   const longPressMovedRef = useRef(false);
 
+  /* CONVERSATION CONTEXT MENU STATE */
+  const [showConvMenu, setShowConvMenu] = useState(false);
+  const [convMenuTarget, setConvMenuTarget] = useState(null);
+  const [convMenuPos, setConvMenuPos] = useState({ top: 0, left: 0 });
+  const convLongPressRef = useRef(null);
+
   /* VOICE RECORDING STATE */
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -105,6 +117,9 @@ export default function App() {
   const [sessionSkillInput, setSessionSkillInput] = useState("");
   const [showSessionForm, setShowSessionForm] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState(new Set());
+
+  /* PUSH NOTIFICATION STATE */
+  const notificationInitializedRef = useRef(false);
 
   /* VOICE/VIDEO CALL STATE */
   const [callState, setCallState] = useState(null); // null | { id, type, status, callerId, receiverId, callerName }
@@ -416,9 +431,20 @@ export default function App() {
     setShowCreateSession(false);
     setCreateSessionForm({ skill: "", type: "teach", topic: "", duration: "45", participantId: "", description: "" });
     showMessage("🎉 Session created successfully!");
+
+    sendPushNotification(f.participantId, {
+      title: "New session request",
+      body: `${getName(profile)} wants to ${f.type} "${f.topic}" with you`,
+      type: "session_request",
+      requestId: newSession.id,
+      senderId: session.user.id,
+      senderName: getName(profile),
+      tag: `session-request-${newSession.id}`,
+    }).catch(() => {});
   }
 
   async function acceptSessionInvitation(sessionId) {
+    const sessionToAccept = learningSessions.find(s => s.id === sessionId);
     const { error } = await supabase
       .from("learning_sessions")
       .update({ status: "accepted" })
@@ -428,6 +454,18 @@ export default function App() {
         s.id === sessionId ? { ...s, status: "accepted" } : s
       ));
       showMessage("✅ Session accepted!");
+
+      if (sessionToAccept?.host_id && sessionToAccept.host_id !== session?.user?.id) {
+        sendPushNotification(sessionToAccept.host_id, {
+          title: "Session accepted",
+          body: `${getName(profile)} accepted your session request for "${sessionToAccept.skill || sessionToAccept.topic}"`,
+          type: "session_accepted",
+          sessionId: sessionId,
+          senderId: session.user.id,
+          senderName: getName(profile),
+          tag: `session-accepted-${sessionId}`,
+        }).catch(() => {});
+      }
     }
   }
 
@@ -850,6 +888,7 @@ export default function App() {
     return () => {
       mounted = false;
       subscription?.unsubscribe?.();
+      stopListeningForMessages();
     };
   }, []);
 
@@ -875,6 +914,9 @@ export default function App() {
         supabase.removeChannel(conversationChannelRef.current);
         conversationChannelRef.current = null;
       }
+
+      stopListeningForMessages();
+      notificationInitializedRef.current = false;
 
       await supabase.auth.signOut();
       // Reset all state
@@ -1067,6 +1109,94 @@ export default function App() {
       loadLearningSessions(userId),
     ]);
     subscribeToPresence(userId);
+    initializeNotifications(userId);
+  }
+
+  /* =========================
+     PUSH NOTIFICATIONS
+  ========================= */
+
+  async function initializeNotifications(userId) {
+    if (notificationInitializedRef.current) return;
+    notificationInitializedRef.current = true;
+
+    try {
+      await registerDeviceToken(userId);
+    } catch (err) {
+      console.warn("Push notification registration failed:", err);
+    }
+
+    listenForForegroundMessages((payload) => {
+      const data = payload.data || {};
+      handleForegroundNotification(data);
+    });
+
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "NOTIFICATION_CLICKED") {
+        handleNotificationClick(event.data.data);
+      }
+    });
+
+    if (window.location.search.includes("notification=true")) {
+      const params = new URLSearchParams(window.location.search);
+      const notifData = {
+        type: params.get("type"),
+        conversationId: params.get("conversationId"),
+        callId: params.get("callId"),
+        callerId: params.get("callerId"),
+        requestId: params.get("requestId"),
+        sessionId: params.get("sessionId"),
+        senderId: params.get("senderId"),
+      };
+      handleNotificationClick(notifData);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }
+
+  function handleForegroundNotification(data) {
+    const senderName = data.senderName || "Someone";
+
+    if (data.type === "chat_message") {
+      if (
+        activeChatUser &&
+        (data.senderId === activeChatUser.id || data.senderId === session?.user?.id)
+      ) {
+        return;
+      }
+      showMessage(`💬 ${senderName}: ${data.body || "New message"}`);
+    } else if (data.type === "incoming_call") {
+      showMessage(`📞 Incoming call from ${senderName}`);
+    } else if (data.type === "session_request") {
+      showMessage(`📅 New session request from ${senderName}`);
+    } else if (data.type === "session_accepted") {
+      showMessage(`✅ ${senderName} accepted your session request`);
+    } else {
+      showMessage(data.body || "New notification");
+    }
+  }
+
+  function handleNotificationClick(data) {
+    if (!data || !data.type) return;
+
+    if (data.type === "chat_message" && data.conversationId) {
+      const senderId = data.senderId;
+      if (senderId) {
+        const person = findPerson(senderId);
+        if (person) {
+          openChat(person);
+        } else {
+          setPage("chat");
+        }
+      } else {
+        setPage("chat");
+      }
+    } else if (data.type === "incoming_call") {
+      setPage("chat");
+    } else if (data.type === "session_request") {
+      setPage("sessions");
+    } else if (data.type === "session_accepted") {
+      setPage("sessions");
+    }
   }
 
   async function loadProfile(userId) {
@@ -1376,9 +1506,10 @@ export default function App() {
     const menuHeight = 280;
     const menuWidth = 220;
     let top = rect.top - menuHeight - 8;
-    let left = e.clientX || rect.left + rect.width / 2;
+    let left = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || (rect.left + rect.width / 2);
 
     if (top < 8) top = rect.bottom + 8;
+    if (top + menuHeight > window.innerHeight - 8) top = window.innerHeight - menuHeight - 8;
     if (left + menuWidth / 2 > window.innerWidth - 16) left = window.innerWidth - menuWidth / 2 - 16;
     if (left - menuWidth / 2 < 16) left = menuWidth / 2 + 16;
 
@@ -1390,6 +1521,71 @@ export default function App() {
   function closeMessageMenu() {
     setShowMessageMenu(false);
     setSelectedMessage(null);
+  }
+
+  /* ─── Conversation Context Menu ─── */
+
+  function handleConvLongPressStart(e, partner) {
+    convLongPressRef.current = setTimeout(() => {
+      showConvContextMenu(partner, e);
+    }, 500);
+  }
+
+  function handleConvLongPressEnd() {
+    if (convLongPressRef.current) {
+      clearTimeout(convLongPressRef.current);
+      convLongPressRef.current = null;
+    }
+  }
+
+  function showConvContextMenu(partner, e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    let top = rect.top - 120;
+    let left = e.clientX || (rect.left + rect.width / 2);
+    if (top < 8) top = rect.bottom + 8;
+    if (left + 160 > window.innerWidth - 16) left = window.innerWidth - 176;
+    if (left - 160 < 16) left = 176;
+    setConvMenuTarget(partner);
+    setConvMenuPos({ top, left });
+    setShowConvMenu(true);
+  }
+
+  function closeConvMenu() {
+    setShowConvMenu(false);
+    setConvMenuTarget(null);
+  }
+
+  async function clearConversation(partner) {
+    if (!partner || !session?.user?.id) return;
+    const myId = session.user.id;
+    try {
+      const { data: msgs, error: fetchErr } = await supabase
+        .from("messages")
+        .select("id")
+        .or(`and(sender_id.eq.${myId},receiver_id.eq.${partner.id}),and(sender_id.eq.${partner.id},receiver_id.eq.${myId})`);
+
+      if (fetchErr) throw fetchErr;
+
+      if (msgs && msgs.length > 0) {
+        for (const msg of msgs) {
+          await supabase.rpc("hide_message_for_me", { p_message_id: msg.id }).catch(() => {});
+        }
+      }
+
+      setChatMessages((prev) => prev.filter((m) => {
+        const isWithPartner = (m.sender_id === myId && m.receiver_id === partner.id) ||
+          (m.sender_id === partner.id && m.receiver_id === myId);
+        return !isWithPartner;
+      }));
+
+      showMessage("Conversation cleared");
+      setTimeout(() => showMessage(""), 2000);
+      loadConversations(myId);
+    } catch (err) {
+      console.error("Clear conversation error:", err);
+      showError("Could not clear conversation: " + (err?.message || "Please try again."));
+    }
+    closeConvMenu();
   }
 
   async function copyMessage(msg) {
@@ -1443,6 +1639,10 @@ export default function App() {
         }
         return c;
       }));
+      // Also reload from DB to be safe
+      if (session?.user?.id) {
+        setTimeout(() => loadConversations(session.user.id), 500);
+      }
     } catch (err) {
       showError("Could not unsend: " + (err?.message || "Please try again."));
     }
@@ -1644,6 +1844,16 @@ export default function App() {
       );
       await loadRecentMessages(session.user.id);
       loadConversations(session.user.id);
+
+      sendPushNotification(activeChatUser.id, {
+        title: getName(profile),
+        body: "🎤 Voice message",
+        type: "chat_message",
+        conversationId: activeConversationId || "",
+        senderId: session.user.id,
+        senderName: getName(profile),
+        tag: `chat-${session.user.id}`,
+      }).catch(() => {});
     } catch (err) {
       console.error("Voice send failed:", err);
       showError("Could not send voice message: " + (err?.message || "Please try again."));
@@ -2143,6 +2353,16 @@ export default function App() {
           callerId: session.user.id,
         },
       });
+
+      sendPushNotification(activeChatUser.id, {
+        title: "Incoming call",
+        body: `${getName(profile)} is calling you`,
+        type: "incoming_call",
+        callId: data.id,
+        callerId: session.user.id,
+        senderName: getName(profile),
+        tag: `call-${data.id}`,
+      }).catch(() => {});
 
       missedCallTimerRef.current = setTimeout(() => {
         missedCallTimerRef.current = null;
@@ -2761,6 +2981,16 @@ export default function App() {
 
       await loadRecentMessages(session.user.id);
       loadConversations(session.user.id);
+
+      sendPushNotification(activeChatUser.id, {
+        title: getName(profile),
+        body: text.length > 100 ? text.substring(0, 100) + "..." : text,
+        type: "chat_message",
+        conversationId: activeConversationId || "",
+        senderId: session.user.id,
+        senderName: getName(profile),
+        tag: `chat-${session.user.id}`,
+      }).catch(() => {});
     } catch (err) {
       console.error("Send message error:", err);
       showError("Could not send message: " + (err?.message || "Please try again."));
@@ -2840,6 +3070,16 @@ export default function App() {
 
       setChatMessages((prev) => [...prev, data]);
       await loadRecentMessages(session.user.id);
+
+      sendPushNotification(activeChatUser.id, {
+        title: getName(profile),
+        body: isImage ? "📷 Photo" : "🎬 Video",
+        type: "chat_message",
+        conversationId: activeConversationId || "",
+        senderId: session.user.id,
+        senderName: getName(profile),
+        tag: `chat-${session.user.id}`,
+      }).catch(() => {});
     } catch (err) {
       console.error("File upload error:", err);
       showError("Could not send media: " + (err?.message || "Please try again."));
@@ -4198,6 +4438,13 @@ export default function App() {
                       key={partner.id}
                       className={`inbox-item ${isActive ? "active" : ""} ${unreadCount > 0 ? "has-unread" : ""}`}
                       onClick={() => setActiveChatUser(partner)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        showConvContextMenu(partner, e);
+                      }}
+                      onPointerDown={(e) => handleConvLongPressStart(e, partner)}
+                      onPointerUp={handleConvLongPressEnd}
+                      onPointerLeave={handleConvLongPressEnd}
                     >
                       <div className="inbox-avatar clickable-avatar" onClick={(e) => { e.stopPropagation(); openPublicProfile(partner.id); }}>
                         {partner.avatar_url ? (
@@ -4384,6 +4631,19 @@ export default function App() {
                           )}
 
                           <div className="message-bubble-wrapper">
+                            {/* Three-dot menu for mobile */}
+                            {!msg.sending && !String(msg.id).startsWith("temp-") && !isUnsent && (
+                              <button
+                                className="msg-more-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  showMessageMenuForMsg(msg, e);
+                                }}
+                                aria-label="Message options"
+                              >
+                                ⋯
+                              </button>
+                            )}
                             {/* Reply preview */}
                             {msg.reply_to_id && msg.reply_to_content && (
                               <div className="reply-preview" onClick={() => {
@@ -4499,6 +4759,41 @@ export default function App() {
                     })
                   )}
                 </div>
+
+                {/* Conversation Context Menu */}
+                {showConvMenu && convMenuTarget && (
+                  <div className="msg-menu-overlay" onClick={closeConvMenu}>
+                    <div
+                      className="msg-action-menu"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        top: convMenuPos.top,
+                        left: convMenuPos.left,
+                        transform: "translateX(-50%)",
+                      }}
+                    >
+                      <button className="msg-menu-item" onClick={() => { openChat(convMenuTarget); closeConvMenu(); }}>
+                        <span className="msg-menu-icon">💬</span> Open chat
+                      </button>
+                      <button className="msg-menu-item" onClick={() => { openPublicProfile(convMenuTarget.id); closeConvMenu(); }}>
+                        <span className="msg-menu-icon">👤</span> View profile
+                      </button>
+                      <div className="msg-menu-divider" />
+                      <button className="msg-menu-item danger" onClick={() => {
+                        if (confirm("Clear all messages in this conversation? This cannot be undone.")) {
+                          clearConversation(convMenuTarget);
+                        } else {
+                          closeConvMenu();
+                        }
+                      }}>
+                        <span className="msg-menu-icon">🗑</span> Clear conversation
+                      </button>
+                      <button className="msg-menu-item cancel" onClick={closeConvMenu}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Message Action Menu (Context Menu) */}
                 {showMessageMenu && selectedMessage && (
