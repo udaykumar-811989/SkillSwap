@@ -2776,6 +2776,11 @@ footer {
   object-fit: cover;
 }
 
+.remote-video.screen-sharing {
+  object-fit: contain;
+  background: #000;
+}
+
 .local-video {
   position: absolute;
   top: 20px;

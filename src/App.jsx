@@ -137,6 +137,7 @@ export default function App() {
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const callTimerRef = useRef(null);
+  const savedCameraTrackRef = useRef(null);
   const callChannelRef = useRef(null);
 
   /* LIVE SESSION MEDIA REFS */
@@ -2654,6 +2655,10 @@ export default function App() {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
+    if (savedCameraTrackRef.current) {
+      savedCameraTrackRef.current.stop();
+      savedCameraTrackRef.current = null;
+    }
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
@@ -2701,45 +2706,62 @@ export default function App() {
   async function toggleScreenShare() {
     try {
       if (isScreenSharing) {
-        // Stop screen sharing - replace with camera track
-        const screenTrack = localStreamRef.current?.getVideoTracks().find(t => t.label.includes("screen") || t.label.includes("display"));
+        // Stop screen sharing — restore saved camera track
+        const screenTrack = localStreamRef.current?.getVideoTracks()[0];
         if (screenTrack) {
           screenTrack.stop();
           localStreamRef.current.removeTrack(screenTrack);
         }
-        // Re-enable camera
-        const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        const camTrack = camStream.getVideoTracks()[0];
+        // Restore original camera track
+        const camTrack = savedCameraTrackRef.current;
         if (camTrack && localStreamRef.current) {
           localStreamRef.current.addTrack(camTrack);
+          // Replace remote peer's track back to camera
+          if (peerConnectionRef.current) {
+            const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
+            if (sender) {
+              await sender.replaceTrack(camTrack);
+            }
+          }
         }
+        savedCameraTrackRef.current = null;
         setIsScreenSharing(false);
+        setCallState(prev => ({ ...prev, isScreenSharing: false }));
       } else {
         // Start screen sharing
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { cursor: "always" },
+          audio: false
+        });
         const screenTrack = screenStream.getVideoTracks()[0];
-        screenTrack.onended = () => {
-          // User stopped sharing via browser UI
-          toggleScreenShare();
-        };
-        // Replace camera track with screen track
+
+        // Save current camera track before replacing
         const oldVideoTrack = localStreamRef.current?.getVideoTracks()[0];
         if (oldVideoTrack) {
-          oldVideoTrack.stop();
+          savedCameraTrackRef.current = oldVideoTrack;
+          // Don't stop the camera track, just remove it from stream
           localStreamRef.current.removeTrack(oldVideoTrack);
         }
+
         if (localStreamRef.current) {
           localStreamRef.current.addTrack(screenTrack);
         }
-        // Update remote peer with new track
+
+        // Update remote peer with screen track
         if (peerConnectionRef.current) {
           const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
           if (sender) {
             await sender.replaceTrack(screenTrack);
           }
         }
-        setCallState(prev => ({ ...prev, isScreenSharing: true }));
+
+        // Handle user stopping via browser UI
+        screenTrack.onended = () => {
+          toggleScreenShare();
+        };
+
         setIsScreenSharing(true);
+        setCallState(prev => ({ ...prev, isScreenSharing: true }));
       }
     } catch (err) {
       console.error("Screen share error:", err);
@@ -3048,6 +3070,10 @@ export default function App() {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(t => t.stop());
         localStreamRef.current = null;
+      }
+      if (savedCameraTrackRef.current) {
+        savedCameraTrackRef.current.stop();
+        savedCameraTrackRef.current = null;
       }
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
@@ -7028,7 +7054,7 @@ function renderLogin() {
         <div className={`call-overlay active-call-overlay ${callState.type}`}>
           {callState.type === "video" && (
             <div className="video-call-container">
-              <video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />
+              <video ref={remoteVideoRef} autoPlay playsInline className={`remote-video ${isScreenSharing ? "screen-sharing" : ""}`} />
               <video ref={localVideoRef} autoPlay playsInline muted className="local-video" />
             </div>
           )}
