@@ -3042,6 +3042,28 @@ export default function App() {
     }
   }, [activeLiveSession, liveSessionState.isCameraOn]);
 
+  // Global cleanup on unmount: stop streams, close connections, remove channels
+  useEffect(() => {
+    return () => {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(t => t.stop());
+        localStreamRef.current = null;
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (callChannelRef.current) {
+        supabase.removeChannel(callChannelRef.current);
+        callChannelRef.current = null;
+      }
+      if (typingChannelRef.current) {
+        supabase.removeChannel(typingChannelRef.current);
+        typingChannelRef.current = null;
+      }
+    };
+  }, []);
+
   async function handleSendMessage(customText) {
     const text = (typeof customText === "string" ? customText : messageInput).trim();
     if (!text || !session?.user?.id || !activeChatUser?.id || sendingMessage) return;
@@ -6718,29 +6740,6 @@ function renderLogin() {
   if (page === "login") {
     return renderLogin();
   }
-
-  // Global cleanup on unmount: stop streams, close connections, remove channels
-  useEffect(() => {
-    return () => {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(t => t.stop());
-        localStreamRef.current = null;
-      }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      if (callChannelRef.current) {
-        supabase.removeChannel(callChannelRef.current);
-        callChannelRef.current = null;
-      }
-      if (typingChannelRef.current) {
-        supabase.removeChannel(typingChannelRef.current);
-        typingChannelRef.current = null;
-      }
-    };
-  }, []);
-
 
 
   return (
