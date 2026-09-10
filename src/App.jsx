@@ -130,6 +130,7 @@ export default function App() {
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [callError, setCallError] = useState("");
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -196,14 +197,7 @@ export default function App() {
   const POINTS_PER_AD = 5;
   const TOTAL_AD_REWARD = POINTS_PER_AD * ADS_FOR_REWARD;
 
-  const [skillPointsLocal, setSkillPointsLocal] = useState(() => {
-    try {
-      const stored = localStorage.getItem("skillswap_points");
-      if (stored !== null) return parseInt(stored, 10);
-      localStorage.setItem("skillswap_points", "20");
-      return 20;
-    } catch { return 20; }
-  });
+  const [skillPointsLocal, setSkillPointsLocal] = useState(20);
 
   const [rewardHistory, setRewardHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem("skillswap_reward_history") || "[]"); }
@@ -224,7 +218,7 @@ export default function App() {
   const [showRewardSuccess, setShowRewardSuccess] = useState(false);
 
   function persistPoints(pts) {
-    localStorage.setItem("skillswap_points", pts.toString());
+    // Points are now synced from DB via profile.skill_points
   }
 
   function persistRewardHistory(hist) {
@@ -253,6 +247,11 @@ export default function App() {
     setSkillPointsLocal(newBalance);
     persistPoints(newBalance);
     addTransaction("earned", amount, reason);
+    // Sync to DB profile
+    if (session?.user?.id) {
+      supabase.from("profiles").update({ skill_points: newBalance }).eq("id", session.user.id)
+        .then(({ error }) => { if (error) console.warn("Failed to sync points to DB:", error); });
+    }
   }
 
   function spendPoints(amount, reason) {
@@ -261,6 +260,11 @@ export default function App() {
     setSkillPointsLocal(newBalance);
     persistPoints(newBalance);
     addTransaction("spent", amount, reason);
+    // Sync to DB profile
+    if (session?.user?.id) {
+      supabase.from("profiles").update({ skill_points: newBalance }).eq("id", session.user.id)
+        .then(({ error }) => { if (error) console.warn("Failed to sync points to DB:", error); });
+    }
     return true;
   }
 
@@ -1230,7 +1234,9 @@ export default function App() {
 
     if (data) {
       setProfile(data);
-      setSkillPoints(data.skill_points || 0);
+      const dbPoints = data.skill_points || 0;
+      setSkillPoints(dbPoints);
+      setSkillPointsLocal(dbPoints);
 
       setForm({
         full_name: data.full_name || data.name || "",
@@ -2199,6 +2205,13 @@ export default function App() {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
+      // TURN servers can be configured via env vars for reliable connectivity
+      // Set VITE_ICE_URL, VITE_ICE_USERNAME, VITE_ICE_CREDENTIAL in .env
+      ...(import.meta.env.VITE_ICE_URL ? [{
+        urls: import.meta.env.VITE_ICE_URL,
+        username: import.meta.env.VITE_ICE_USERNAME || "",
+        credential: import.meta.env.VITE_ICE_CREDENTIAL || "",
+      }] : []),
     ],
   };
 
@@ -2419,12 +2432,22 @@ export default function App() {
       missedCallTimerRef.current = setTimeout(() => {
         missedCallTimerRef.current = null;
         setCallState((prev) => {
-          if (prev && prev.status === "calling") {
+          if (prev && (prev.status === "calling" || prev.status === "accepted")) {
             endCall("missed");
           }
           return prev;
         });
       }, 30000);
+
+      // Connection timeout: if still not connected after 15s, show error
+      const connectionTimeoutRef = setTimeout(() => {
+        setCallState((prev) => {
+          if (prev && prev.status !== "connected") {
+            setCallError("Connection is taking longer than expected. The other user may not have answered.");
+          }
+          return prev;
+        });
+      }, 15000);
     } catch (err) {
       console.error("Start call error:", err);
       showError("Could not start call: " + (err?.message || "Please try again."));
@@ -2648,6 +2671,7 @@ export default function App() {
     setIsSpeakerOn(true);
     setIsCameraOn(true);
     setCallError("");
+    setIsScreenSharing(false);
   }
 
   function toggleMute() {
@@ -2676,7 +2700,7 @@ export default function App() {
 
   async function toggleScreenShare() {
     try {
-      if (callState.isScreenSharing) {
+      if (isScreenSharing) {
         // Stop screen sharing - replace with camera track
         const screenTrack = localStreamRef.current?.getVideoTracks().find(t => t.label.includes("screen") || t.label.includes("display"));
         if (screenTrack) {
@@ -2689,7 +2713,7 @@ export default function App() {
         if (camTrack && localStreamRef.current) {
           localStreamRef.current.addTrack(camTrack);
         }
-        setCallState(prev => ({ ...prev, isScreenSharing: false }));
+        setIsScreenSharing(false);
       } else {
         // Start screen sharing
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -2715,6 +2739,7 @@ export default function App() {
           }
         }
         setCallState(prev => ({ ...prev, isScreenSharing: true }));
+        setIsScreenSharing(true);
       }
     } catch (err) {
       console.error("Screen share error:", err);
@@ -3127,12 +3152,17 @@ export default function App() {
       const mediaType = isImage ? "image" : "video";
 
       if (isImage) {
-        mediaUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(new Error("Failed to read image"));
-          reader.readAsDataURL(file);
-        });
+        const fileExt = file.name.split(".").pop() || "jpg";
+        const filePath = `chat-media/${session.user.id}/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("chat-media")
+          .upload(filePath, file);
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from("chat-media")
+          .getPublicUrl(filePath);
+        mediaUrl = urlData?.publicUrl || "";
       } else {
         const fileExt = file.name.split(".").pop();
         const filePath = `chat-media/${session.user.id}/${Date.now()}.${fileExt}`;
@@ -3368,12 +3398,14 @@ export default function App() {
       let mediaUrl = "";
 
       if (isImage) {
-        mediaUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(new Error("Failed to read image"));
-          reader.readAsDataURL(file);
-        });
+        const fileExt = file.name.split(".").pop() || "jpg";
+        const filePath = `chat-media/${session.user.id}/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("chat-media").upload(filePath, file);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage
+          .from("chat-media").getPublicUrl(filePath);
+        mediaUrl = urlData?.publicUrl || "";
       } else {
         const fileExt = file.name.split(".").pop();
         const filePath = `chat-media/${session.user.id}/${Date.now()}.${fileExt}`;
@@ -6687,6 +6719,28 @@ function renderLogin() {
     return renderLogin();
   }
 
+  // Global cleanup on unmount: stop streams, close connections, remove channels
+  useEffect(() => {
+    return () => {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(t => t.stop());
+        localStreamRef.current = null;
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (callChannelRef.current) {
+        supabase.removeChannel(callChannelRef.current);
+        callChannelRef.current = null;
+      }
+      if (typingChannelRef.current) {
+        supabase.removeChannel(typingChannelRef.current);
+        typingChannelRef.current = null;
+      }
+    };
+  }, []);
+
 
 
   return (
@@ -7042,11 +7096,11 @@ function renderLogin() {
                   {isCameraOn ? "📹" : "📷"}
                 </button>
                 <button
-                  className={`call-control-btn ${callState.isScreenSharing ? "active" : ""}`}
+                  className={`call-control-btn ${isScreenSharing ? "active" : ""}`}
                   onClick={toggleScreenShare}
-                  title={callState.isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                  title={isScreenSharing ? "Stop Sharing" : "Share Screen"}
                 >
-                  {callState.isScreenSharing ? "🖥️" : "💻"}
+                  {isScreenSharing ? "🖥️" : "💻"}
                 </button>
                 <button
                   className={`call-control-btn ${isSpeakerOn ? "active" : ""}`}
