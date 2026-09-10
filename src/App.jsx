@@ -131,6 +131,7 @@ export default function App() {
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [callError, setCallError] = useState("");
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [remoteScreenSharing, setRemoteScreenSharing] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -138,6 +139,7 @@ export default function App() {
   const localStreamRef = useRef(null);
   const callTimerRef = useRef(null);
   const savedCameraTrackRef = useRef(null);
+  const isScreenSharingRef = useRef(false);
   const callChannelRef = useRef(null);
 
   /* LIVE SESSION MEDIA REFS */
@@ -2404,6 +2406,8 @@ export default function App() {
               missedCallTimerRef.current = null;
             }
             endCall(payload.type === "call-declined" ? "declined" : "ended");
+          } else if (payload.type === "screen-sharing-state") {
+            setRemoteScreenSharing(payload.sharing);
           }
         })
         .subscribe();
@@ -2524,6 +2528,8 @@ export default function App() {
             }
           } else if (payload.type === "call-ended" || payload.type === "call-declined") {
             endCall(payload.type === "call-declined" ? "declined" : "ended");
+          } else if (payload.type === "screen-sharing-state") {
+            setRemoteScreenSharing(payload.sharing);
           }
         })
         .subscribe(async (status) => {
@@ -2677,6 +2683,8 @@ export default function App() {
     setIsCameraOn(true);
     setCallError("");
     setIsScreenSharing(false);
+    setRemoteScreenSharing(false);
+    isScreenSharingRef.current = false;
   }
 
   function toggleMute() {
@@ -2705,41 +2713,45 @@ export default function App() {
 
   async function toggleScreenShare() {
     try {
-      if (isScreenSharing) {
-        // Stop screen sharing — restore saved camera track
+      if (isScreenSharingRef.current) {
+        // STOP screen sharing — restore saved camera track
+        isScreenSharingRef.current = false;
         const screenTrack = localStreamRef.current?.getVideoTracks()[0];
         if (screenTrack) {
           screenTrack.stop();
           localStreamRef.current.removeTrack(screenTrack);
         }
-        // Restore original camera track
         const camTrack = savedCameraTrackRef.current;
         if (camTrack && localStreamRef.current) {
           localStreamRef.current.addTrack(camTrack);
-          // Replace remote peer's track back to camera
           if (peerConnectionRef.current) {
             const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
-            if (sender) {
-              await sender.replaceTrack(camTrack);
-            }
+            if (sender) await sender.replaceTrack(camTrack);
           }
         }
         savedCameraTrackRef.current = null;
         setIsScreenSharing(false);
         setCallState(prev => ({ ...prev, isScreenSharing: false }));
+        // Broadcast to remote peer that screen sharing stopped
+        if (callChannelRef.current) {
+          callChannelRef.current.send({
+            type: "broadcast",
+            event: "call-signal",
+            payload: { type: "screen-sharing-state", sharing: false, callerId: session?.user?.id },
+          });
+        }
       } else {
-        // Start screen sharing
+        // START screen sharing
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: { cursor: "always" },
           audio: false
         });
         const screenTrack = screenStream.getVideoTracks()[0];
 
-        // Save current camera track before replacing
+        // Save current camera track
         const oldVideoTrack = localStreamRef.current?.getVideoTracks()[0];
         if (oldVideoTrack) {
           savedCameraTrackRef.current = oldVideoTrack;
-          // Don't stop the camera track, just remove it from stream
           localStreamRef.current.removeTrack(oldVideoTrack);
         }
 
@@ -2747,21 +2759,29 @@ export default function App() {
           localStreamRef.current.addTrack(screenTrack);
         }
 
-        // Update remote peer with screen track
         if (peerConnectionRef.current) {
           const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
-          if (sender) {
-            await sender.replaceTrack(screenTrack);
-          }
+          if (sender) await sender.replaceTrack(screenTrack);
         }
 
-        // Handle user stopping via browser UI
+        // Handle user clicking browser's "Stop sharing" bar
         screenTrack.onended = () => {
-          toggleScreenShare();
+          if (isScreenSharingRef.current) {
+            toggleScreenShare();
+          }
         };
 
+        isScreenSharingRef.current = true;
         setIsScreenSharing(true);
         setCallState(prev => ({ ...prev, isScreenSharing: true }));
+        // Broadcast to remote peer that screen sharing started
+        if (callChannelRef.current) {
+          callChannelRef.current.send({
+            type: "broadcast",
+            event: "call-signal",
+            payload: { type: "screen-sharing-state", sharing: true, callerId: session?.user?.id },
+          });
+        }
       }
     } catch (err) {
       console.error("Screen share error:", err);
@@ -3075,6 +3095,7 @@ export default function App() {
         savedCameraTrackRef.current.stop();
         savedCameraTrackRef.current = null;
       }
+      isScreenSharingRef.current = false;
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
@@ -7054,7 +7075,7 @@ function renderLogin() {
         <div className={`call-overlay active-call-overlay ${callState.type}`}>
           {callState.type === "video" && (
             <div className="video-call-container">
-              <video ref={remoteVideoRef} autoPlay playsInline className={`remote-video ${isScreenSharing ? "screen-sharing" : ""}`} />
+              <video ref={remoteVideoRef} autoPlay playsInline className={`remote-video ${remoteScreenSharing ? "screen-sharing" : ""}`} />
               <video ref={localVideoRef} autoPlay playsInline muted className="local-video" />
             </div>
           )}
