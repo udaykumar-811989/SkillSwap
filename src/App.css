@@ -2888,6 +2888,7 @@ footer {
   backdrop-filter: blur(10px);
   padding: 16px 28px;
   border-radius: 24px;
+  z-index: 100;
 }
 
 .call-control-btn {
@@ -6897,6 +6898,7 @@ main {
     box-sizing: border-box;
     border-radius: 0;
     transform: none;
+    z-index: 100;
   }
 
   .call-control-btn {

@@ -138,7 +138,6 @@ export default function App() {
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const callTimerRef = useRef(null);
-  const savedCameraTrackRef = useRef(null);
   const isScreenSharingRef = useRef(false);
   const callChannelRef = useRef(null);
 
@@ -2661,10 +2660,6 @@ export default function App() {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
-    if (savedCameraTrackRef.current) {
-      savedCameraTrackRef.current.stop();
-      savedCameraTrackRef.current = null;
-    }
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
@@ -2714,25 +2709,41 @@ export default function App() {
   async function toggleScreenShare() {
     try {
       if (isScreenSharingRef.current) {
-        // STOP screen sharing — restore saved camera track
+        // STOP screen sharing
         isScreenSharingRef.current = false;
+
+        // Stop the screen track
         const screenTrack = localStreamRef.current?.getVideoTracks()[0];
         if (screenTrack) {
+          screenTrack.onended = null; // prevent re-trigger
           screenTrack.stop();
-          localStreamRef.current.removeTrack(screenTrack);
+          try { localStreamRef.current.removeTrack(screenTrack); } catch(e) {}
         }
-        const camTrack = savedCameraTrackRef.current;
-        if (camTrack && localStreamRef.current) {
+
+        // Get fresh camera stream
+        const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const camTrack = camStream.getVideoTracks()[0];
+
+        // Remove any remaining video tracks from local stream
+        if (localStreamRef.current) {
+          localStreamRef.current.getVideoTracks().forEach(t => {
+            t.stop();
+            try { localStreamRef.current.removeTrack(t); } catch(e) {}
+          });
           localStreamRef.current.addTrack(camTrack);
-          if (peerConnectionRef.current) {
-            const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
-            if (sender) await sender.replaceTrack(camTrack);
-          }
         }
+
+        // Update remote peer
+        if (peerConnectionRef.current) {
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
+          if (sender) await sender.replaceTrack(camTrack);
+        }
+
         savedCameraTrackRef.current = null;
         setIsScreenSharing(false);
-        setCallState(prev => ({ ...prev, isScreenSharing: false }));
-        // Broadcast to remote peer that screen sharing stopped
+        setCallState(prev => prev ? { ...prev, isScreenSharing: false } : prev);
+
+        // Broadcast stop to remote peer
         if (callChannelRef.current) {
           callChannelRef.current.send({
             type: "broadcast",
@@ -2748,33 +2759,57 @@ export default function App() {
         });
         const screenTrack = screenStream.getVideoTracks()[0];
 
-        // Save current camera track
-        const oldVideoTrack = localStreamRef.current?.getVideoTracks()[0];
-        if (oldVideoTrack) {
-          savedCameraTrackRef.current = oldVideoTrack;
-          localStreamRef.current.removeTrack(oldVideoTrack);
-        }
-
+        // Remove old video tracks from local stream (but save camera reference)
         if (localStreamRef.current) {
+          localStreamRef.current.getVideoTracks().forEach(t => {
+            try { localStreamRef.current.removeTrack(t); } catch(e) {}
+          });
           localStreamRef.current.addTrack(screenTrack);
         }
 
+        // Update remote peer
         if (peerConnectionRef.current) {
           const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
           if (sender) await sender.replaceTrack(screenTrack);
         }
 
-        // Handle user clicking browser's "Stop sharing" bar
+        // When user clicks browser's "Stop sharing" bar
         screenTrack.onended = () => {
           if (isScreenSharingRef.current) {
-            toggleScreenShare();
+            // Directly call stop logic to avoid stale closure issues
+            isScreenSharingRef.current = false;
+            screenTrack.onended = null;
+            screenTrack.stop();
+            navigator.mediaDevices.getUserMedia({ video: true }).then(camStream => {
+              const camTrack = camStream.getVideoTracks()[0];
+              if (localStreamRef.current) {
+                localStreamRef.current.getVideoTracks().forEach(t => {
+                  try { localStreamRef.current.removeTrack(t); } catch(e) {}
+                });
+                localStreamRef.current.addTrack(camTrack);
+              }
+              if (peerConnectionRef.current) {
+                const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
+                if (sender) sender.replaceTrack(camTrack);
+              }
+              setIsScreenSharing(false);
+              setCallState(prev => prev ? { ...prev, isScreenSharing: false } : prev);
+              if (callChannelRef.current) {
+                callChannelRef.current.send({
+                  type: "broadcast",
+                  event: "call-signal",
+                  payload: { type: "screen-sharing-state", sharing: false, callerId: session?.user?.id },
+                });
+              }
+            }).catch(() => {});
           }
         };
 
         isScreenSharingRef.current = true;
         setIsScreenSharing(true);
-        setCallState(prev => ({ ...prev, isScreenSharing: true }));
-        // Broadcast to remote peer that screen sharing started
+        setCallState(prev => prev ? { ...prev, isScreenSharing: true } : prev);
+
+        // Broadcast start to remote peer
         if (callChannelRef.current) {
           callChannelRef.current.send({
             type: "broadcast",
@@ -2785,6 +2820,8 @@ export default function App() {
       }
     } catch (err) {
       console.error("Screen share error:", err);
+      isScreenSharingRef.current = false;
+      setIsScreenSharing(false);
       setCallError("Screen share not available or denied");
       setTimeout(() => setCallError(""), 3000);
     }
@@ -3090,10 +3127,6 @@ export default function App() {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(t => t.stop());
         localStreamRef.current = null;
-      }
-      if (savedCameraTrackRef.current) {
-        savedCameraTrackRef.current.stop();
-        savedCameraTrackRef.current = null;
       }
       isScreenSharingRef.current = false;
       if (peerConnectionRef.current) {
